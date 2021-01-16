@@ -1,0 +1,2 @@
+from whatsapp_to_sqlite import parser
+import pytest

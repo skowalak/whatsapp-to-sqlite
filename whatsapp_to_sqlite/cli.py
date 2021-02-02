@@ -22,7 +22,6 @@ def cli():
 @click.argument(
     "log_directory",
     type=click.Path(file_okay=False, dir_okay=True, allow_dash=True),
-    help="Directory with all exported text files",
     required=True,
 )
 @click.option(
@@ -38,11 +37,25 @@ def cli():
     is_flag=True,
     help="Erase redundant files in the database",
 )
-def run_import(db_path, log_directory, data_directory, force_erase):
+def run_import(db_path, log_directory, data_directory, force_erase=False):
+    print(db_path, log_directory, data_directory, force_erase)
     db = sqlite_utils.Database(db_path)
-    utils.crawl_directory(db, log_directory)
-    utils.import_data(db, data_directory)
-    utils.connect_data()
-    utils.deduplicate_data()
+    filenames = []
+    for subdir, dirs, files in os.walk(log_directory):
+        for filename in files:
+            filenames.append(os.path.join(subdir, filename))
+    read_files(filenames, db)
     if force_erase:
-        utils.clean_redundant_data()
+        print("utils.dedup_data()")
+
+
+def read_files(filenames, db):
+    for filename in filenames:
+        read_file(filename, db)
+
+
+def read_file(filename, db):
+    print("File: ", filename)
+    messages = utils.parse(utils.tokenize(filename))
+    for message in messages:
+        utils.store_message(message, db)

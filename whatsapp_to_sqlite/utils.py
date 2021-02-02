@@ -1,8 +1,16 @@
 import base64
 
 
-def save_messages():
-    print("")
+def tokenize(file):
+    return ""
+
+
+def parse(tokens):
+    return ["", ""]
+
+
+def store_message(message, db):
+    return 0
 
 
 def save_senders():

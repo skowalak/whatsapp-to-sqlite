@@ -29,7 +29,6 @@ setup(
     """,
     install_requires=[
         "click",
-        "deplicate>=1.2.3",
         "sqlite-utils>=2.7.2",
 
     ],

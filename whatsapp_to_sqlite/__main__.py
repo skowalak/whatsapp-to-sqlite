@@ -4,7 +4,7 @@ from whatsapp_to_sqlite import cli
 
 
 def main():
-    "Make runnable as module."
+    """Make runnable as module."""
     cli.cli(sys.argv[1:])
 
 

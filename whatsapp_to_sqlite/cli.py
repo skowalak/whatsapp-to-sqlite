@@ -1,5 +1,6 @@
 import datetime
 import os
+import logging
 import sqlite_utils
 
 import click
@@ -10,7 +11,7 @@ from whatsapp_to_sqlite import utils
 @click.group()
 @click.version_option()
 def cli():
-    "Convert your exported plaintext message logs to an SQLite database."
+    """Convert your exported plaintext message logs to an SQLite database."""
 
 
 @cli.command()
@@ -35,7 +36,7 @@ def cli():
     "-e",
     "--force-erase",
     is_flag=True,
-    help="Erase redundant files in the database",
+    help="Erase files after exporting them to target directory",
 )
 def run_import(db_path, log_directory, data_directory, force_erase=False):
     print(db_path, log_directory, data_directory, force_erase)
@@ -46,6 +47,7 @@ def run_import(db_path, log_directory, data_directory, force_erase=False):
             filenames.append(os.path.join(subdir, filename))
     read_files(filenames, db)
     if force_erase:
+        logging.info("reached deduplication")
         print("utils.dedup_data()")
 
 
@@ -59,3 +61,4 @@ def read_file(filename, db):
     messages = utils.parse(utils.tokenize(filename))
     for message in messages:
         utils.store_message(message, db)
+        utils.store_ids(0)

@@ -3,8 +3,7 @@
 [![Tests](https://github.com/dogsheep/healthkit-to-sqlite/workflows/Test/badge.svg)](https://github.com/dogsheep/healthkit-to-sqlite/actions?query=workflow%3ATest)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/skowalak/whatsapp-to-sqlite/blob/master/LICENSE)
 
-Save your exported plaintext message logs to an SQLite database. Supports different languages, time formats.
-Can import and deduplicate file attachments.
+Save your exported plaintext message logs to an SQLite database.
 
 ## How to install
 
@@ -14,3 +13,21 @@ Upgrade with
     
     $ pip install --upgrade whatsapp-to-sqlite
 
+## Customize the parser
+
+WhatsApp message exports will differ according to your system's locale and/or
+language. E.g, an export from a device with settings for Germany has a
+timstamp formatted like this: `dd.mm.yy, HH:MM` while a device with US-settings
+will have a timestamp formatted like this: `mm/dd/yy, HH:MM`.
+
+Chat events like some person adding another person to a group or changing their
+phone number will be in the devices default language:
+
+**You were added to some group:**
+```
+German: <timestamp> - <admin_name> hat dich hinzugefügt.
+English (US): <timestamp> - <admin_name>
+```
+
+To customize the parser according to your needs, just add your
+location/language combination to the `parser.py` if not already there.

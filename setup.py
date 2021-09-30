@@ -25,12 +25,13 @@ setup(
     packages=["whatsapp_to_sqlite"],
     entry_points="""
         [console_scripts]
-        whatsapp_to_sqlite=whatsapp_to_sqlite.cli:cli
+        whatsapp-to-sqlite=whatsapp_to_sqlite.__main__:main
     """,
     install_requires=[
         "click",
         "sqlite-utils>=2.7.2",
-
+        "arpeggio",
+        "marshmallow"
     ],
     extras_require={"test": ["pytest"]},
     tests_require=["whatsapp-to-sqlite[test]"],

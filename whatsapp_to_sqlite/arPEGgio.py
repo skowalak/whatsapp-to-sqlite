@@ -6,23 +6,21 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import json
+import os.path
 
 ###############################################################################
 # Grammar Definition
 ###############################################################################
 
 def log(): return OneOrMore(message), EOF
-def message(): return [start_with_header, continued_message]
-#def message(): 
-#    return [(message_header, [file_attached, file_excluded, message_text]),
-#            (timestamp, " - ", system_event)]
-def start_with_header(): 
-    return timestamp, " - ", [user_gen, system_event]
+def message(): 
+    return [
+        (timestamp, " - ", username, [file_attached,
+                                      file_excluded,
+                                      message_text], ZeroOrMore(continued_message)),
+        (timestamp, " - ", room_event)]
 
-#def message_header():
-#    return timestamp, " - ", username
-
-# timestamps: customize according to your locale
+# FIXME: Timestamp localization
 def timestamp(): return day, ".", month, ".", year, ", ", hour, ":", minute
 def day(): return _(r"(\d\d)")
 def month(): return _(r"(\d\d)")
@@ -30,23 +28,26 @@ def year(): return _(r"(\d\d)")
 def hour(): return _(r"(\d\d)")
 def minute(): return _(r"(\d\d)")
 
-# text message: matches any text
-def user_gen(): 
-    return username, [file_attached, file_excluded, message_text]
 def username(): return _(r"(.*?): ")
-def file_attached(): return filename, " (Datei angehängt)", newline
-def file_excluded(): return "<Medien ausgeschlossen>", newline
+# FIXME: File attachment localization
+def file_attached(): return filename, " (Datei angehängt)\n"
+def file_excluded(): return "<Medien ausgeschlossen>\n"
 def filename(): return _(r"(.+\.\w+)")
 
-# system event: customize according to your locale/system language
-def system_event(): return any_text_with_newline
-
 def message_text(): return any_text_with_newline
-def continued_message(): return any_text_with_newline
+def continued_message(): return Not(timestamp), any_text_with_newline
 
-def any_text(): return _(r"(.*)")
-def any_text_with_newline(): return _(r"(.*\n)")
-def newline(): return "\n"
+def any_text_with_newline(): return _(r"(.*?\n)")
+
+# FIXME: event localization
+def room_event(): return any_text_with_newline
+
+def room_create(): return username, " hat die Gruppe \"", groupname, "\" erstellt.\n"
+def room_join(): return any_text_with_newline
+def room_kick(): return any_text_with_newline
+def room_leave(): return any_text_with_newline
+def number_change(): return any_text_with_newline
+
 
 ###############################################################################
 # End of Grammar Definition
@@ -77,7 +78,7 @@ class MessageVisitor(PTNodeVisitor):
         message_text = children[1]
         message_dict = {}
         message_dict["user"] = user_author
-        message_dict["message"] = message_text
+        message_dict["content"] = message_text
         message_dict["type"] = "message"
         return message_dict
 
@@ -108,30 +109,48 @@ class MessageVisitor(PTNodeVisitor):
     def visit_system_event(self, node, children):
         message_dict = {}
         message_dict["type"] = "system"
+        message_dict["content"] = node
         return message_dict
 
     def visit_continued_message(self, node, children):
-        message_dict = {}
-        message_dict["type"] = "continued"
-        message_dict["content"] = str(node)
-        return message_dict
+        return str(node)
     
     def visit_message(self, node, children):
-        return children[0]
+        message = children[0]
+        if len(children) > 1 and message["type"] == "message":
+            message_text = message["content"]
+            # More than one child node -> more than one line of content
+            additional_lines = children[1:]
+            for line in additional_lines:
+                try:
+                    message_text["text"] = message_text.get("text", "") + line
+                except KeyError as e:
+                    print(message_text)
+                    print(line)
+                    raise e
+
+
+        #print("\n", json.dumps(message, indent=2, default=str), "\n")
+        return message
 
     def visit_log(self, node, children):
-        print("=> LOG: ", children)
+        #TODO: Iterate over messages and load
         return children
 
 
 
-#logfile = open("tests/logs/WhatsApp Chat mit eiergilde.net Eiergilde.txt")
-logfile = open("tests/logs/eg.txt")
-logstring = logfile.read()
-logfile.close()
+def parse_single_file(filename=None, path=None):
+    #logfile = open("tests/logs/WhatsApp Chat mit eiergilde.net Eiergilde.txt")
+    #logfile = open("tests/logs/eg.txt")
+    filepath = os.path.join(path, filename)
+    print(filepath)
+    logfile = open(filepath)
 
-parser = ParserPython(log, skipws=False, debug=True, memoization=True)
-parse_tree = parser.parse(logstring)
-result = visit_parse_tree(parse_tree, MessageVisitor(debug=True))
-print(json.dumps(result, indent=2, default=str, sort_keys=True))
+    with open(filepath, "r", encoding="utf-8") as logfile:
+        logstring = logfile.read()
+        parser = ParserPython(log, skipws=False, debug=True, memoization=True)
+        parse_tree = parser.parse(logstring)
+        result = visit_parse_tree(parse_tree, MessageVisitor(debug=True))
+        return result
+
 

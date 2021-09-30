@@ -31,3 +31,10 @@ English (US): <timestamp> - <admin_name>
 
 To customize the parser according to your needs, just add your
 location/language combination to the `parser.py` if not already there.
+
+## TODOs
+
+* Explain database schema and original WhatsApp Database schema
+* Add and explain migration from WhatsApp DB to Matrix DB if possible
+* Add content-addressable-storage
+  * find sensible hashing algorithm with minimal collisions

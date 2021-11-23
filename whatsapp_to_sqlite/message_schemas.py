@@ -62,7 +62,7 @@ class NameRoomEventSchema(EventSchema):
     sets that name.
     """
     event_content = fields.Nested(ContentSchema(only=()))
-    event_type = fields.String(default=EVENT_TYPE + ".room.name")
+    event_type = fields.String(default=f"{EVENT_TYPE}.room.name")
     
 
 class MessageRoomEventSchema(EventSchema):
@@ -70,7 +70,7 @@ class MessageRoomEventSchema(EventSchema):
     A Message sent
     """
     event_content = fields.Nested(ContentSchema(only(body,)))
-    event_type = fields.String(default=EVENT_TYPE + ".room.message")
+    event_type = fields.String(default=f"{EVENT_TYPE}.room.message")
 
 
 class AvatarRoomEventSchema(EventSchema):
@@ -78,4 +78,4 @@ class AvatarRoomEventSchema(EventSchema):
     Changing the rooms avatar image.
     """
     event_content = fields.Nested(ContentSchema(only(info, url)))
-    event_type = fields.String(default=EVENT_TYPE + ".room.avatar")
+    event_type = fields.String(default=f"{EVENT_TYPE}.room.avatar")

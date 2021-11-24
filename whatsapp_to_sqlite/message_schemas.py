@@ -17,9 +17,9 @@ class ContentSchema(Schema):
     creator = fields.String()
     info = fields.Nested(Schema())
     is_direct = fields.Boolean()
-    membership = fields.Str(validate=validate.OneOf(
-        ["invite", "join", "knock", "leave", "ban"]
-    ))
+    membership = fields.Str(
+        validate=validate.OneOf(["invite", "join", "knock", "leave", "ban"])
+    )
     msgtype = fields.String()
     name = fields.String()
     pinned = fields.List(fields.String())
@@ -44,6 +44,7 @@ class CreateRoomEventSchema(EventSchema):
     """
     Root Event of every room.
     """
+
     event_content = fields.Nested(ContentSchema(only=(creator,)))
     event_type = fields.Str(default=EVENT_TYPE + ".room.create")
 
@@ -57,19 +58,27 @@ class MemberRoomEventSchema(EventSchema):
 class NameRoomEventSchema(EventSchema):
     """
     Every Room gets an auto-generated event ID.
-    
+
     Apart from that ID a room can also have a user-given room name. This event
     sets that name.
     """
+
     event_content = fields.Nested(ContentSchema(only=()))
     event_type = fields.String(default=f"{EVENT_TYPE}.room.name")
-    
+
 
 class MessageRoomEventSchema(EventSchema):
     """
     A Message sent
     """
-    event_content = fields.Nested(ContentSchema(only(body,)))
+
+    event_content = fields.Nested(
+        ContentSchema(
+            only(
+                body,
+            )
+        )
+    )
     event_type = fields.String(default=f"{EVENT_TYPE}.room.message")
 
 
@@ -77,5 +86,6 @@ class AvatarRoomEventSchema(EventSchema):
     """
     Changing the rooms avatar image.
     """
+
     event_content = fields.Nested(ContentSchema(only(info, url)))
     event_type = fields.String(default=f"{EVENT_TYPE}.room.avatar")

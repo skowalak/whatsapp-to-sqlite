@@ -1,4 +1,5 @@
 import base64
+import sqlite_utils
 
 
 def tokenize(file):

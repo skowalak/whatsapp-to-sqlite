@@ -12,46 +12,107 @@ import os.path
 # Grammar Definition
 ###############################################################################
 
-def log(): return OneOrMore(message), EOF
-def message(): 
+
+def log():
+    return OneOrMore(message), EOF
+
+
+def message():
     return [
-        (timestamp, " - ", username, [file_attached,
-                                      file_excluded,
-                                      message_text], ZeroOrMore(continued_message)),
-        (timestamp, " - ", room_event)]
+        (
+            timestamp,
+            " - ",
+            username,
+            [file_attached, file_excluded, message_text],
+            ZeroOrMore(continued_message),
+        ),
+        (timestamp, " - ", room_event),
+    ]
+
 
 # FIXME: Timestamp localization
-def timestamp(): return day, ".", month, ".", year, ", ", hour, ":", minute
-def day(): return _(r"(\d\d)")
-def month(): return _(r"(\d\d)")
-def year(): return _(r"(\d\d)")
-def hour(): return _(r"(\d\d)")
-def minute(): return _(r"(\d\d)")
+def timestamp():
+    return day, ".", month, ".", year, ", ", hour, ":", minute
 
-def username(): return _(r"(.*?): ")
+
+def day():
+    return _(r"(\d\d)")
+
+
+def month():
+    return _(r"(\d\d)")
+
+
+def year():
+    return _(r"(\d\d)")
+
+
+def hour():
+    return _(r"(\d\d)")
+
+
+def minute():
+    return _(r"(\d\d)")
+
+
+def username():
+    return _(r"(.*?): ")
+
+
 # FIXME: File attachment localization
-def file_attached(): return filename, " (Datei angehängt)\n"
-def file_excluded(): return "<Medien ausgeschlossen>\n"
-def filename(): return _(r"(.+\.\w+)")
+def file_attached():
+    return filename, " (Datei angehängt)\n"
 
-def message_text(): return any_text_with_newline
-def continued_message(): return Not(timestamp), any_text_with_newline
 
-def any_text_with_newline(): return _(r"(.*?\n)")
+def file_excluded():
+    return "<Medien ausgeschlossen>\n"
+
+
+def filename():
+    return _(r"(.+\.\w+)")
+
+
+def message_text():
+    return any_text_with_newline
+
+
+def continued_message():
+    return Not(timestamp), any_text_with_newline
+
+
+def any_text_with_newline():
+    return _(r"(.*?\n)")
+
 
 # FIXME: event localization
-def room_event(): return any_text_with_newline
+def room_event():
+    return any_text_with_newline
 
-def room_create(): return username, " hat die Gruppe \"", groupname, "\" erstellt.\n"
-def room_join(): return any_text_with_newline
-def room_kick(): return any_text_with_newline
-def room_leave(): return any_text_with_newline
-def number_change(): return any_text_with_newline
+
+def room_create():
+    return username, ' hat die Gruppe "', groupname, '" erstellt.\n'
+
+
+def room_join():
+    return any_text_with_newline
+
+
+def room_kick():
+    return any_text_with_newline
+
+
+def room_leave():
+    return any_text_with_newline
+
+
+def number_change():
+    return any_text_with_newline
 
 
 ###############################################################################
 # End of Grammar Definition
 ###############################################################################
+
 
 class MessageVisitor(PTNodeVisitor):
     def visit_timestamp(self, node, children):
@@ -65,12 +126,12 @@ class MessageVisitor(PTNodeVisitor):
         timezone = ZoneInfo("Europe/Berlin")
         timestamp = datetime(year, month, day, hours, minutes, tzinfo=timezone)
         return timestamp
-    
+
     def visit_username(self, node, children):
         """
         Strip trailing colon and space chars from username
         """
-        name_without_colon = str(node)[0:len(str(node)) - 2]
+        name_without_colon = str(node)[0 : len(str(node)) - 2]
         return name_without_colon
 
     def visit_user_gen(self, node, children):
@@ -114,7 +175,7 @@ class MessageVisitor(PTNodeVisitor):
 
     def visit_continued_message(self, node, children):
         return str(node)
-    
+
     def visit_message(self, node, children):
         message = children[0]
         if len(children) > 1 and message["type"] == "message":
@@ -129,19 +190,17 @@ class MessageVisitor(PTNodeVisitor):
                     print(line)
                     raise e
 
-
-        #print("\n", json.dumps(message, indent=2, default=str), "\n")
+        # print("\n", json.dumps(message, indent=2, default=str), "\n")
         return message
 
     def visit_log(self, node, children):
-        #TODO: Iterate over messages and load
+        # TODO: Iterate over messages and load
         return children
 
 
-
 def parse_single_file(filename=None, path=None):
-    #logfile = open("tests/logs/WhatsApp Chat mit eiergilde.net Eiergilde.txt")
-    #logfile = open("tests/logs/eg.txt")
+    # logfile = open("tests/logs/WhatsApp Chat mit eiergilde.net Eiergilde.txt")
+    # logfile = open("tests/logs/eg.txt")
     filepath = os.path.join(path, filename)
     print(filepath)
     logfile = open(filepath)
@@ -152,5 +211,3 @@ def parse_single_file(filename=None, path=None):
         parse_tree = parser.parse(logstring)
         result = visit_parse_tree(parse_tree, MessageVisitor(debug=True))
         return result
-
-

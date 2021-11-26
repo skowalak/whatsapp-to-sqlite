@@ -1,13 +1,11 @@
 from setuptools import setup
 import os
-
 VERSION = "0.1"
-
 
 def get_long_description():
     with open(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md"),
-            encoding="utf8",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md"),
+        encoding="utf8",
     ) as fp:
         return fp.read()
 
@@ -27,14 +25,7 @@ setup(
         [console_scripts]
         whatsapp-to-sqlite=whatsapp_to_sqlite.__main__:main
     """,
-    install_requires=[
-        "click",
-        "sqlite-utils>=2.7.2",
-        "arpeggio",
-        "marshmallow"
-    ],
+    install_requires=["click", "sqlite-utils>=2.7.2", "arpeggio", "marshmallow"],
     extras_require={"test": ["pytest"]},
     tests_require=["whatsapp-to-sqlite[test]"],
 )
-
-

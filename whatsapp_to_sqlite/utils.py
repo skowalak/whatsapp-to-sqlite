@@ -1,34 +1,35 @@
 import base64
+import os
 import sqlite_utils
 
 
-def tokenize(file):
-    return ""
+def parse_room_file(absolute_file_path: str) -> list[dict]:
+    pass
 
 
-def parse(tokens):
-    return ["", ""]
+def save_message(message, db):
+    pass
 
 
-def store_message(message, db):
-    return 0
+def save_sender():
+    pass
 
 
-def save_senders():
-    print("")
+def save_room():
+    pass
 
 
-def save_files():
-    print("")
+def save_file():
+    pass
 
 
-def deduplicate_files():
-    print("")
+def crawl_directory_for_rooms(path: str) -> list[str]:
+    path = os.path.abspath(path)
+    file_list = []
+    # iterate over all files in directory
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if file.endswith(".txt"):
+                file_list.append(os.path.join(root, file))
 
-
-def crawl_directory():
-    print("")
-
-
-def read_file():
-    print("")
+    return file_list

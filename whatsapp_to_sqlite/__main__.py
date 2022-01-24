@@ -1,20 +1,41 @@
 import sys
+import json
+import os
 
-from whatsapp_to_sqlite import cli
+from whatsapp_to_sqlite import cli, arPEGgio
+
+
+def parse_single_file(filename=None, path=None):
+    filepath = os.path.join(path, filename)
+
+    with open(filepath, "r", encoding="utf-8") as logfile:
+        return arPEGgio.parse(logfile)
+
+
+def debug_dump(msglist: list) -> None:
+    from whatsapp_to_sqlite.messages import Message
+    from datetime import datetime
+    def json_serial(obj):
+        if isinstance(obj, Message):
+            return obj.toDict()
+
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+
+    print(json.dumps(msglist, indent=2, default=json_serial, sort_keys=True))
 
 
 def main():
-    """Make runnable as module."""
-    # cli.cli(sys.argv[1:])
-    from whatsapp_to_sqlite.arPEGgio import parse_single_file
-
+    fname="WhatsApp Chat mit Die üblichen Verdächtigen.txt"
+    # fname="eg.txt"
+    # fname="WhatsApp Chat mit eiergilde.net Eiergilde.txt"
+    
     chat_messages = parse_single_file(
-        filename="WhatsApp Chat mit Die üblichen Verdächtigen.txt",
-        # filename="eg.txt",
-        # filename="WhatsApp Chat mit eiergilde.net Eiergilde.txt",
+        filename=fname,
         path="tests/logs",
     )
-    print(json.dumps(chat_messages, indent=2, default=str, sort_keys=True))
+
+    debug_dump(chat_messages)
 
 
 if __name__ == "__main__":

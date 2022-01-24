@@ -7,6 +7,8 @@ import click
 
 from whatsapp_to_sqlite import utils
 
+LOG = logging.getLogger(__name__)
+
 
 @click.group()
 @click.version_option()
@@ -39,16 +41,15 @@ def cli():
     help="Erase files after exporting them to target directory",
 )
 def run_import(db_path, log_directory, data_directory, force_erase=False):
-    print(db_path, log_directory, data_directory, force_erase)
+    LOG.debug(db_path, log_directory, data_directory, force_erase)
     db = sqlite_utils.Database(db_path)
-    filenames = []
-    for subdir, dirs, files in os.walk(log_directory):
-        for filename in files:
-            filenames.append(os.path.join(subdir, filename))
-    read_files(filenames, db)
+    files = utils.crawl_directory_for_rooms(log_directory)
+    for file in files:
+        room = utils.parse_room_file(file)
     if force_erase:
-        logging.info("reached deduplication")
-        print("utils.dedup_data()")
+        # TODO(skowalak): save files that have been successfully imported so we
+        # don't erase rooms that failed with errors.
+        LOG.info("Erasing imported data")
 
 
 def read_files(filenames, db):
@@ -57,7 +58,7 @@ def read_files(filenames, db):
 
 
 def read_file(filename, db):
-    print("File: ", filename)
+    LOG.info("File: ", filename)
     messages = utils.parse(utils.tokenize(filename))
     for message in messages:
         utils.store_message(message, db)

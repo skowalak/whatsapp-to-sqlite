@@ -7,15 +7,15 @@ def parse_room_file(absolute_file_path: str) -> list[dict]:
     pass
 
 
-def save_message(message, db):
+def save_messages(message, db):
     pass
 
 
-def save_sender():
+def save_senders():
     pass
 
 
-def save_room():
+def save_rooms():
     pass
 
 

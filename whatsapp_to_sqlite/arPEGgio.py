@@ -3,14 +3,35 @@ from arpeggio.cleanpeg import ParserPEG
 from arpeggio import RegExMatch as _
 
 from datetime import datetime
+from warnings import warn
 from zoneinfo import ZoneInfo
 
 from whatsapp_to_sqlite.messages import (
     Message,
-    UserMessage,
-    SystemMessage,
-    RoomCreate,
+    RoomAdminPromotion,
+    RoomAvatarChangeBySelf,
+    RoomAvatarChangeByThirdParty,
+    RoomAvatarDeleteBySelf,
+    RoomAvatarDeleteByThirdParty,
+    RoomCreateBySelf,
+    RoomCreateByThirdParty,
+    RoomJoinSelfByThirdParty,
+    RoomJoinThirdPartyBySelf,
+    RoomJoinThirdPartyByThirdParty,
+    RoomJoinThirdPartyByUnknown,
+    RoomKickSelfByThirdParty,
+    RoomKickThirdPartyBySelf,
+    RoomKickThirdPartyByThirdParty,
+    RoomKickThirdPartyByUnknown,
+    RoomLeaveSelf,
+    RoomLeaveThirdParty,
+    RoomMessage,
+    RoomNameBySelf,
+    RoomNameByThirdParty,
+    RoomNumberChangeWithNumber,
+    RoomNumberChangeWithoutNumber,
 )
+
 
 ###############################################################################
 # Grammar Definition
@@ -24,6 +45,7 @@ def log():
 def message():
     return [user_message, system_message]
 
+
 def user_message():
     return (
         timestamp,
@@ -31,14 +53,14 @@ def user_message():
         username,
         ": ",
         [file_attached, file_excluded, message_text],
-        ZeroOrMore(continued_message)
+        ZeroOrMore(continued_message),
     )
+
 
 def system_message():
     return timestamp, " - ", system_event
 
 
-# FIXME: Timestamp localization
 def timestamp():
     return day, ".", month, ".", year, ", ", hour, ":", minute
 
@@ -71,7 +93,7 @@ def name():
     return _(r"(.*)")
 
 
-# FIXME: File attachment localization
+# FIXME: (skowalak) File attachment localization
 def file_attached():
     return filename, " (Datei angehängt)\n"
 
@@ -96,7 +118,7 @@ def any_text_with_newline():
     return _(r"(.*?\n)")
 
 
-# FIXME(skowalak): event localization
+# FIXME: (skowalak) event localization
 def system_event():
     return [
         room_create_t,
@@ -108,7 +130,7 @@ def system_event():
         room_kick_t_t,
         room_kick_t_t2,
         room_kick_t_f,
-        room_kick_f_t1,
+        room_kick_f_t,
         room_leave_t,
         room_leave_f,
         number_change1,
@@ -120,7 +142,7 @@ def system_event():
         room_avatar_delete_t,
         room_avatar_delete_f,
         admin_promotion,
-#        any_text_with_newline
+        #        any_text_with_newline
     ]
 
 
@@ -131,96 +153,111 @@ def system_event():
 
 # Create room
 def room_create_t():
-    return _(r".+?(?= hat)"), " hat die Gruppe \"", _(r".+?(?=\" erstellt)"), "\" erstellt.\n"
+    return (
+        _(r".+?(?= hat)"),
+        ' hat die Gruppe "',
+        _(r".+?(?=\" erstellt)"),
+        '" erstellt.\n',
+    )
 
 
 def room_create_f():
-    return "Du hast die Gruppe \"", _(r".+?(?=\" erstellt)"), "\" erstellt.\n"
+    return 'Du hast die Gruppe "', _(r".+?(?=\" erstellt)"), '" erstellt.\n'
+
 
 # Join / Adds to a room
 def room_join_t_t():
-    #return name, " hat ", Not("dich"), name, " hinzugefügt.\n"
-    return _(r"(.*) hat (.*) hinzugefügt.\n")
+    return (
+        _(r".+?(?= hat)"),
+        " hat ",
+        Not("dich"),
+        _(r".+?(?= hinzugefügt)"),
+        " hinzugefügt.\n",
+    )
 
 
 def room_join_t_f():
-    #return name, " hat dich hinzugefügt.\n"
-    return _(r"(.*) hat dich hinzugefügt.\n")
+    return _(r".+?(?= hat)"), " hat dich hinzugefügt.\n"
 
 
 def room_join_f_t():
-    #return "Du hast ", name, " hinzugefügt.\n"
-    return _(r"Du hast (.*) hinzugefügt.\n")
+    return "Du hast ", _(r".+?(?= hinzugefügt)"), " hinzugefügt.\n"
 
 
 def room_join_t_t2():
-    return _(r"(.*) wurde hinzugefügt.\n")
+    return _(r".+?(?= wurde)"), " wurde hinzugefügt.\n"
 
 
 # Kick / Leaves from a room
 def room_kick_t_t():
-    #return name, " hat ", Not("dich"), name, " entfernt.\n"
-    return _(r"(.*) hat (.*) entfernt.\n")
+    return (
+        _(r".+?(?= hat)"),
+        " hat ",
+        Not("dich"),
+        _(r".+?(?= entfernt)"),
+        " entfernt.\n",
+    )
 
 
 def room_kick_t_f():
-    #return name, " hat dich entfernt.\n"
-    return _(r"(.*) hat dich entfernt.\n")
+    return _(r".+?(?= hat)"), " hat dich entfernt.\n"
 
 
-def room_kick_f_t1():
-    #return "Du hast ", name, " entfernt.\n"
-    return _(r"Du hast (.*) entfernt.\n")
+def room_kick_f_t():
+    return "Du hast ", _(r".+?(?= entfernt)"), " entfernt.\n"
 
 
 def room_kick_t_t2():
-    #return name, " wurde entfernt.\n"
-    return _(r"(.*) wurde entfernt.\n")
+    return _(r".+?(?= wurde)"), " wurde entfernt.\n"
 
 
 def room_leave_t():
-    #return name, " hat die Gruppe verlassen.\n"
-    return _(r"(.*) hat die Gruppe verlassen.\n")
+    return _(r".+?(?= hat)"), " hat die Gruppe verlassen.\n"
 
 
 def room_leave_f():
-    #return "Du hast die Gruppe verlassen.\n"
     return "Du hast die Gruppe verlassen.\n"
 
 
 def number_change1():
-    #return name, " hat zu ", name, " gewechselt.\n"
-    return _(r"(.*) hat zu (.*) gewechselt.\n")
+    return _(r".+?(?= hat)"), " hat zu ", _(r".+?(?= gewechselt)"), " gewechselt.\n"
 
 
 def number_change2():
-    #return (
-    #    name, 
-    #    (" hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
-    #    "schreiben oder die neue Nummer hinzuzufügen.\n")
-    #)
-    return _(r"(.*) hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
-            "schreiben oder die neue Nummer hinzuzufügen.\n")
+    return (
+        _(r".+?(?= hat)"),
+        (
+            " hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
+            "schreiben oder die neue Nummer hinzuzufügen.\n"
+        ),
+    )
 
 
 # Room Modification
 def room_name_t():
-    #return (
-    #    name,
-    #    " hat den Betreff von \"",
-    #    name,
-    #    "\" zu \"",
-    #    name,
-    #    "\" geändert.\n")
-    return _(r"(.*) hat den Betreff von \"(.*)\" zu \"(.*)\" geändert.\n")
+    return (
+        _(r".+?(?= hat)"),
+        ' hat den Betreff von "',
+        _(r".+?(?= \")"),
+        '" zu "',
+        _(r".+?(?= \")"),
+        '" geändert.\n',
+    )
+
 
 def room_name_f():
-    #return "Du hast den Betreff von \"", name, "\" zu \"", name, "\" geändert.\n"
-    return _(r"Du hast den Betreff von \"(.*)\" zu \"(.*)\" geändert.\n")
+    # return "Du hast den Betreff von \"", name, "\" zu \"", name, "\" geändert.\n"
+    return (
+        'Du hast den Betreff von "',
+        _(r".+?(?= \")"),
+        '" zu "',
+        _(r".+?(?= \")"),
+        '" geändert.\n',
+    )
 
 
 def room_avatar_t():
-    return _(r"(.*) hat das Gruppenbild geändert.\n")
+    return _(r".+?(?= hat)"), " hat das Gruppenbild geändert.\n"
 
 
 def room_avatar_f():
@@ -228,8 +265,7 @@ def room_avatar_f():
 
 
 def room_avatar_delete_t():
-    #return name, " hat das Gruppenbild gelöscht.\n"
-    return _(r"(.*) hat das Gruppenbild gelöscht.\n")
+    return _(r".+?(?= hat)"), " hat das Gruppenbild gelöscht.\n"
 
 
 def room_avatar_delete_f():
@@ -269,99 +305,95 @@ class MessageVisitor(PTNodeVisitor):
             msg.full_text = full_text
             return msg
 
-        return SystemMessage(full_text=full_text)
-        
+        warn(f"dropping unmatched message: {full_text}")
+        return node
+
     def visit_room_create_t(self, node, children):
-        return RoomCreate(sender=children[0], room_name=children[1])
-    
+        return RoomCreateByThirdParty(sender=children[0], room_name=children[1])
+
     def visit_room_create_f(self, node, children):
-        pass
+        return RoomCreateBySelf(room_name=children[0])
 
-    def visit_room_join_t_t(self, node, children):
-        pass
+    def visit_room_join_t_t(self, n, c):
+        return RoomJoinThirdPartyByThirdParty(sender=c[0], target=c[1])
 
-    def visit_room_join_t_f(self, node, children):
-        pass
+    def visit_room_join_t_t(self, n, c):
+        return RoomJoinThirdPartyByThirdParty(sender=c[0], target=c[1])
 
-    def visit_room_join_f_t(self, node, children):
-        pass
+    def visit_room_join_t_t2(self, n, c):
+        return RoomJoinThirdPartyByUnknown(target=c[0])
 
-    def visit_room_kick_t_t(self, node, children):
-        pass
-    
-    def visit_room_kick_t_t2(self, node, children):
-        pass
+    def visit_room_join_t_f(self, n, c):
+        return RoomJoinSelfByThirdParty(sender=c[0])
 
-    def visit_room_kick_t_f(self, node, children):
-        pass
+    def visit_room_join_f_t(self, node, c):
+        return RoomJoinThirdPartyBySelf(target=c[0])
 
-    def visit_room_kick_f_t1(self, node, children):
-        pass
+    def visit_room_kick_t_t(self, node, c):
+        return RoomKickThirdPartyByThirdParty(sender=c[0], target=c[1])
 
-    def visit_room_leave_t(self, node, children):
-        pass
+    def visit_room_kick_t_t2(self, node, c):
+        return RoomKickThirdPartyByUnknown(target=c[0])
+
+    def visit_room_kick_t_f(self, node, c):
+        return RoomKickSelfByThirdParty(sender=c[0])
+
+    def visit_room_kick_f_t(self, node, c):
+        return RoomKickThirdPartyBySelf(target=c[0])
+
+    def visit_room_leave_t(self, node, c):
+        return RoomLeaveThirdParty(sender=c[0])
 
     def visit_room_leave_f(self, node, children):
-        pass
+        return RoomLeaveSelf()
 
     def visit_number_change1(self, node, children):
-        pass
+        return RoomNumberChangeWithNumber(sender=children[0], new_number=children[1])
 
     def visit_number_change2(self, node, children):
-        pass
+        return RoomNumberChangeWithoutNumber(sender=children[0])
 
-    def visit_room_name_t(self, node, children):
-        pass
+    def visit_room_name_t(self, node, c):
+        return RoomNameByThirdParty(sender=c[0], room_name=c[1])
 
     def visit_room_name_f(self, node, children):
-        pass
+        return RoomNameBySelf(room_name=children[0])
 
     def visit_room_avatar_t(self, node, children):
-        pass
+        return RoomAvatarChangeByThirdParty(sender=children[0])
 
     def visit_room_avatar_f(self, node, children):
-        pass
+        return RoomAvatarChangeBySelf()
 
     def visit_room_avatar_delete_t(self, node, children):
-        pass
+        return RoomAvatarDeleteByThirdParty(sender=children[0])
 
     def visit_room_avatar_delete_f(self, node, children):
-        pass
+        return RoomAvatarDeleteBySelf()
 
     def visit_admin_promotion(self, node, children):
-        pass
+        return RoomAdminPromotion()
 
     # END system events
-    
+
     def visit_file_excluded(self, node, children):
-        return {
-            "file": True,
-            "filename": None,
-            "file_lost": True
-        }
+        return {"file": True, "filename": None, "file_lost": True}
 
     def visit_file_attached(self, node, children):
-        return {
-            "file": True,
-            "filename": children[0],
-            "file_lost": False
-        }
+        return {"file": True, "filename": children[0], "file_lost": False}
 
     def visit_message_text(self, node, children):
         return {"text": str(node)}
 
-
-
     def visit_continued_message(self, node, children):
         return {"continuted_text": str(node)}
-
 
     def visit_user_message(self, node, children):
         msgdict = {}
         for child in children[2:]:
             msgdict.update(child)
 
-        msg = UserMessage(
+        msg = RoomMessage(
             timestamp=children[0],
             full_text=str(node),
             sender=children[1],
@@ -369,20 +401,17 @@ class MessageVisitor(PTNodeVisitor):
             continued_text=msgdict.get("continued_text"),
             filename=msgdict.get("filename"),
             file_lost=msgdict.get("file_lost"),
-            file=msgdict.get("file", False)
+            file=msgdict.get("file", False),
         )
         return msg
-
 
     def visit_system_message(self, node, children):
         msg = children[1]
         msg.timestamp = children[0]
         return msg
 
-
     def visit_message(self, node, children):
         return children[0]
-            
 
     def visit_log(self, node, children):
         return children

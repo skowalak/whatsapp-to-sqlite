@@ -7,8 +7,8 @@ from datetime import datetime
 
 @dataclass
 class Message:
-    timestamp: datetime
-    full_text: str
+    timestamp: datetime = None
+    full_text: str = None
 
     def toDict(self):
         return asdict(self)
@@ -16,11 +16,11 @@ class Message:
 
 @dataclass
 class UserMessage(Message):
-    sender: str
-    text: str
-    continued_text: str
-    filename: str
-    file_lost: bool
+    sender: str = None
+    text: str = None
+    continued_text: str = None
+    filename: str = None
+    file_lost: bool = False
     file: bool = False
     msgtype: str = "USER"
 
@@ -31,6 +31,7 @@ class SystemMessage(Message):
     msgtype: str = "SYSTEM"
 
 
+@dataclass
 class RoomCreate(SystemMessage):
     sender: str = None
     room_name: str = None

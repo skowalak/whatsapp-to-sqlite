@@ -8,7 +8,8 @@ from zoneinfo import ZoneInfo
 from whatsapp_to_sqlite.messages import (
     Message,
     UserMessage,
-    SystemMessage
+    SystemMessage,
+    RoomCreate,
 )
 
 ###############################################################################
@@ -27,7 +28,8 @@ def user_message():
     return (
         timestamp,
         " - ",
-        username_with_colon,
+        username,
+        ": ",
         [file_attached, file_excluded, message_text],
         ZeroOrMore(continued_message)
     )
@@ -61,8 +63,8 @@ def minute():
     return _(r"(\d\d)")
 
 
-def username_with_colon():
-    return _(r"(.*?): ")
+def username():
+    return _(r".*?(?=:)")
 
 
 def name():
@@ -100,6 +102,7 @@ def system_event():
         room_create_t,
         room_create_f,
         room_join_t_t,
+        room_join_t_t2,
         room_join_t_f,
         room_join_f_t,
         room_kick_t_t,
@@ -128,78 +131,96 @@ def system_event():
 
 # Create room
 def room_create_t():
-    return name, ' hat die Gruppe "', name, '" erstellt.\n'
+    return _(r".+?(?= hat)"), " hat die Gruppe \"", _(r".+?(?=\" erstellt)"), "\" erstellt.\n"
 
 
 def room_create_f():
-    return "Du hast die Gruppe \"", name, "\" erstellt.\n"
+    return "Du hast die Gruppe \"", _(r".+?(?=\" erstellt)"), "\" erstellt.\n"
 
 # Join / Adds to a room
 def room_join_t_t():
-    return name, " hat ", Not("dich"), name, " hinzugefügt.\n"
+    #return name, " hat ", Not("dich"), name, " hinzugefügt.\n"
+    return _(r"(.*) hat (.*) hinzugefügt.\n")
 
 
 def room_join_t_f():
-    return name, " hat dich hinzugefügt.\n"
+    #return name, " hat dich hinzugefügt.\n"
+    return _(r"(.*) hat dich hinzugefügt.\n")
 
 
 def room_join_f_t():
-    return "Du hast ", name, " hinzugefügt.\n"
+    #return "Du hast ", name, " hinzugefügt.\n"
+    return _(r"Du hast (.*) hinzugefügt.\n")
+
+
+def room_join_t_t2():
+    return _(r"(.*) wurde hinzugefügt.\n")
 
 
 # Kick / Leaves from a room
 def room_kick_t_t():
-    return name, " hat ", Not("dich"), name, " entfernt.\n"
+    #return name, " hat ", Not("dich"), name, " entfernt.\n"
+    return _(r"(.*) hat (.*) entfernt.\n")
 
 
 def room_kick_t_f():
-    return name, " hat dich entfernt.\n"
+    #return name, " hat dich entfernt.\n"
+    return _(r"(.*) hat dich entfernt.\n")
 
 
 def room_kick_f_t1():
-    return "Du hast ", name, " entfernt.\n"
+    #return "Du hast ", name, " entfernt.\n"
+    return _(r"Du hast (.*) entfernt.\n")
 
 
 def room_kick_t_t2():
-    return name, " wurde entfernt.\n"
+    #return name, " wurde entfernt.\n"
+    return _(r"(.*) wurde entfernt.\n")
 
 
 def room_leave_t():
-    return name, " hat die Gruppe verlassen.\n"
+    #return name, " hat die Gruppe verlassen.\n"
+    return _(r"(.*) hat die Gruppe verlassen.\n")
 
 
 def room_leave_f():
+    #return "Du hast die Gruppe verlassen.\n"
     return "Du hast die Gruppe verlassen.\n"
 
 
 def number_change1():
-    return name, " hat zu ", name, " gewechselt.\n"
+    #return name, " hat zu ", name, " gewechselt.\n"
+    return _(r"(.*) hat zu (.*) gewechselt.\n")
 
 
 def number_change2():
-    return (
-        name, 
-        (" hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
-        "schreiben oder die neue Nummer hinzuzufügen.\n")
-    )
+    #return (
+    #    name, 
+    #    (" hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
+    #    "schreiben oder die neue Nummer hinzuzufügen.\n")
+    #)
+    return _(r"(.*) hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
+            "schreiben oder die neue Nummer hinzuzufügen.\n")
 
 
 # Room Modification
 def room_name_t():
-    return (
-        name,
-        " hat den Betreff von \"",
-        name,
-        "\" zu \"",
-        name,
-        "\" geändert.\n")
+    #return (
+    #    name,
+    #    " hat den Betreff von \"",
+    #    name,
+    #    "\" zu \"",
+    #    name,
+    #    "\" geändert.\n")
+    return _(r"(.*) hat den Betreff von \"(.*)\" zu \"(.*)\" geändert.\n")
 
 def room_name_f():
-    return "Du hast den Betreff von \"", name, "\" zu \"", name, "\" geändert.\n"
+    #return "Du hast den Betreff von \"", name, "\" zu \"", name, "\" geändert.\n"
+    return _(r"Du hast den Betreff von \"(.*)\" zu \"(.*)\" geändert.\n")
 
 
 def room_avatar_t():
-    return name, " hat das Gruppenbild geändert.\n"
+    return _(r"(.*) hat das Gruppenbild geändert.\n")
 
 
 def room_avatar_f():
@@ -207,7 +228,8 @@ def room_avatar_f():
 
 
 def room_avatar_delete_t():
-    return name, " hat das Gruppenbild gelöscht.\n"
+    #return name, " hat das Gruppenbild gelöscht.\n"
+    return _(r"(.*) hat das Gruppenbild gelöscht.\n")
 
 
 def room_avatar_delete_f():
@@ -236,22 +258,21 @@ class MessageVisitor(PTNodeVisitor):
         timestamp = datetime(year, month, day, hours, minutes, tzinfo=timezone)
         return timestamp
 
-    def visit_username_with_colon(self, node, children):
-        """
-        Strip trailing colon and space chars from username
-        """
-        name = str(node)
-        if name.endswith(": "):
-            name = name[0 : len(name) - 2]
-
-        return name
+    def visit_username(self, node, children):
+        return str(node)
 
     # BEGIN system events
     def visit_system_event(self, node, children):
-        return SystemMessage(None, str(node))
+        full_text = str(node)
+        if children and isinstance(children[0], Message):
+            msg = children[0]
+            msg.full_text = full_text
+            return msg
+
+        return SystemMessage(full_text=full_text)
         
     def visit_room_create_t(self, node, children):
-        pass
+        return RoomCreate(sender=children[0], room_name=children[1])
     
     def visit_room_create_f(self, node, children):
         pass
@@ -369,7 +390,7 @@ class MessageVisitor(PTNodeVisitor):
 
 def parse(f) -> list[Message]:
     logstring = f.read()
-    parser = ParserPython(log, skipws=False, debug=True, memoization=True)
+    parser = ParserPython(log, skipws=False, debug=False, memoization=True)
     parse_tree = parser.parse(logstring)
     result = visit_parse_tree(parse_tree, MessageVisitor(debug=True))
     return result

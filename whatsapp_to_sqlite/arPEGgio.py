@@ -309,40 +309,40 @@ class MessageVisitor(PTNodeVisitor):
         return node
 
     def visit_room_create_t(self, node, children):
-        return RoomCreateByThirdParty(sender=children[0], room_name=children[1])
+        return RoomCreateByThirdParty(sender=children[0], new_room_name=children[1])
 
     def visit_room_create_f(self, node, children):
-        return RoomCreateBySelf(room_name=children[0])
+        return RoomCreateBySelf(new_room_name=children[0])
 
-    def visit_room_join_t_t(self, n, c):
-        return RoomJoinThirdPartyByThirdParty(sender=c[0], target=c[1])
+    def visit_room_join_t_t(self, node, children):
+        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=c[1])
 
-    def visit_room_join_t_t(self, n, c):
-        return RoomJoinThirdPartyByThirdParty(sender=c[0], target=c[1])
+    def visit_room_join_t_t(self, node, children):
+        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=c[1])
 
-    def visit_room_join_t_t2(self, n, c):
-        return RoomJoinThirdPartyByUnknown(target=c[0])
+    def visit_room_join_t_t2(self, node, children):
+        return RoomJoinThirdPartyByUnknown(target=children[0])
 
-    def visit_room_join_t_f(self, n, c):
-        return RoomJoinSelfByThirdParty(sender=c[0])
+    def visit_room_join_t_f(self, node, children):
+        return RoomJoinSelfByThirdParty(sender=children[0])
 
-    def visit_room_join_f_t(self, node, c):
-        return RoomJoinThirdPartyBySelf(target=c[0])
+    def visit_room_join_f_t(self, node, children):
+        return RoomJoinThirdPartyBySelf(target=children[0])
 
-    def visit_room_kick_t_t(self, node, c):
-        return RoomKickThirdPartyByThirdParty(sender=c[0], target=c[1])
+    def visit_room_kick_t_t(self, node, children):
+        return RoomKickThirdPartyByThirdParty(sender=children[0], target=c[1])
 
-    def visit_room_kick_t_t2(self, node, c):
-        return RoomKickThirdPartyByUnknown(target=c[0])
+    def visit_room_kick_t_t2(self, node, children):
+        return RoomKickThirdPartyByUnknown(target=children[0])
 
-    def visit_room_kick_t_f(self, node, c):
-        return RoomKickSelfByThirdParty(sender=c[0])
+    def visit_room_kick_t_f(self, node, children):
+        return RoomKickSelfByThirdParty(sender=children[0])
 
-    def visit_room_kick_f_t(self, node, c):
-        return RoomKickThirdPartyBySelf(target=c[0])
+    def visit_room_kick_f_t(self, node, children):
+        return RoomKickThirdPartyBySelf(target=children[0])
 
-    def visit_room_leave_t(self, node, c):
-        return RoomLeaveThirdParty(sender=c[0])
+    def visit_room_leave_t(self, node, children):
+        return RoomLeaveThirdParty(sender=children[0])
 
     def visit_room_leave_f(self, node, children):
         return RoomLeaveSelf()
@@ -354,10 +354,10 @@ class MessageVisitor(PTNodeVisitor):
         return RoomNumberChangeWithoutNumber(sender=children[0])
 
     def visit_room_name_t(self, node, c):
-        return RoomNameByThirdParty(sender=c[0], room_name=c[1])
+        return RoomNameByThirdParty(sender=c[0], new_room_name=c[1])
 
     def visit_room_name_f(self, node, children):
-        return RoomNameBySelf(room_name=children[0])
+        return RoomNameBySelf(new_room_name=children[0])
 
     def visit_room_avatar_t(self, node, children):
         return RoomAvatarChangeByThirdParty(sender=children[0])
@@ -386,7 +386,7 @@ class MessageVisitor(PTNodeVisitor):
         return {"text": str(node)}
 
     def visit_continued_message(self, node, children):
-        return {"continuted_text": str(node)}
+        return {"continued_text": str(node)}
 
     def visit_user_message(self, node, children):
         msgdict = {}

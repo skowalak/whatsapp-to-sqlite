@@ -1,6 +1,6 @@
 # whatsapp-to-sqlite
 [![PyPI](https://img.shields.io/pypi/v/whatsapp-to-sqlite.svg)](https://pypi.org/project/whatsapp-to-sqlite/)
-[![Tests](https://github.com/skowalak/whatsapp-to-sqlite/workflows/test/badge.svg)](https://github.com/skowalak/whatsapp-to-sqlite/actions?query=workflow%3Atest)
+[![Tests](https://github.com/skowalak/whatsapp-to-sqlite/actions/workflows/test.yml/badge.svg)](https://github.com/skowalak/whatsapp-to-sqlite/actions?query=workflow%3Atest)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/skowalak/whatsapp-to-sqlite/blob/master/LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 

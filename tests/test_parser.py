@@ -1,5 +1,5 @@
-from whatsapp_to_sqlite import parser
-import pytest
+#from whatsapp_to_sqlite import parser
+#import pytest
 
 # Locale: German
 # Time Format: dotted, 24h

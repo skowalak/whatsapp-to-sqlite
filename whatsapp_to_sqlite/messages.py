@@ -2,7 +2,7 @@
 Messages
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from datetime import datetime
 
 
@@ -10,33 +10,32 @@ from datetime import datetime
 class Message:
     timestamp: datetime = None
     full_text: str = None
+    sender: str = None
+    room_name: str = None
 
     def toDict(self):
         data = asdict(self)
         data["type"] = self.__class__.__name__
         return {k: v for k, v in data.items() if v is not None}
 
+    def replace(self, **changes):
+        return replace(self, **changes)
+
 
 @dataclass
 class RoomMessage(Message):
-    sender: str = None
     text: str = None
     continued_text: str = None
     filename: str = None
     file_lost: bool = False
     file: bool = False
-    msgtype: str = "USER"
 
 
 @dataclass
 class SystemMessage(Message):
-    """Base class for all WhatsApp-issued messages"""
-
-    msgtype: str = "SYSTEM"
-    sender: str = None
     target: str = None
-    room_name: str = None
     new_number: str = None
+    new_room_name: str = None
 
 
 @dataclass

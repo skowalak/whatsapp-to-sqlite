@@ -76,7 +76,8 @@ def run_import(
     Files containing chat logs must consist of one file per chat log. Its
     filename must match the pattern "WhatsApp Chat with <name>.txt"
     """
-    logging.basicConfig(format="%(message)s")
+    loglevel = logging.INFO if not verbose else logging.DEBUG
+    logging.basicConfig(format="%(message)s", level=loglevel)
     logger = logging.getLogger(__name__)
     logger.debug(
         "chats path: %s, db path: %s, data dir: %s", chat_files, db_path, data_directory
@@ -95,6 +96,8 @@ def run_import(
     # initialize tables
 
     errors = False
+    # TODO(skowalak): For which locale are we crawling? What form do log
+    # filenames have there? -> CLI flag with default value.
     files = utils.crawl_directory_for_rooms(chat_files)
     for file in files:
         try:

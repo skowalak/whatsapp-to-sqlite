@@ -3,6 +3,7 @@ import logging
 import os
 import pathlib
 import shutil
+import time
 
 import click
 import sqlite_utils
@@ -21,19 +22,36 @@ def cli():
 @cli.command(name="import")
 @click.argument(
     "chat_files",
-    type=click.Path(file_okay=True, dir_okay=True, allow_dash=True),
+    type=click.Path(
+        file_okay=True,
+        dir_okay=True,
+        allow_dash=True,
+        resolve_path=True,
+        path_type=pathlib.Path
+    ),
     required=True,
 )
 @click.argument(
     "db_path",
     default="messagedb.sqlite3",
-    type=click.Path(file_okay=True, dir_okay=False, allow_dash=False),
+    type=click.Path(
+        file_okay=True,
+        dir_okay=False,
+        allow_dash=False,
+        resolve_path=True,
+        path_type=pathlib.Path
+    ),
     required=False,
 )
 @click.option(
     "-d",
     "--data-directory",
-    type=click.Path(file_okay=False, dir_okay=True, allow_dash=False),
+    type=click.Path(
+        file_okay=False,
+        dir_okay=True,
+        allow_dash=False,
+        resolve_path=True
+    ),
     help=(
         "Path(s) which contain additional exported media. "
         "If left empty images, videos, files and voice memos "
@@ -45,7 +63,12 @@ def cli():
     "-o",
     "--output-directory",
     default="messagedb_files",
-    type=click.Path(file_okay=False, dir_okay=True, allow_dash=False),
+    type=click.Path(
+        file_okay=False,
+        dir_okay=True,
+        allow_dash=False,
+        resolve_path=True
+    ),
     help=("Path to directory, where processed media will be stored."),
     required=False,
 )
@@ -62,8 +85,8 @@ def cli():
     help="Be more verbose when logging errors.",
 )
 def run_import(
-    chat_files,
-    db_path,
+    chat_files: pathlib.Path,
+    db_path: pathlib.Path,
     data_directory,
     output_directory,
     force_erase=False,
@@ -82,26 +105,36 @@ def run_import(
     logger.debug(
         "chats path: %s, db path: %s, data dir: %s", chat_files, db_path, data_directory
     )
-    if pathlib.Path(db_path).exists():
-        logger.warning("Database file at %s already exists! Creating backup.")
+    if db_path.exists():
+        logger.warning("Database file at %s already exists! Creating backup.", db_path)
         try:
-            shutil.copy2(db_path, f"{db_path}.{time.time()}.bkp")
+            shutil.copy2(str(db_path), f"{db_path}.{time.time()}.bkp")
         except OSError as error:
             logger.error("Cannot write backup database file: %s", str(error))
             raise click.ClickException(
                 "Database file already exists, cannot write backup file."
             )
     db = sqlite_utils.Database(db_path)
-    # TODO(skowalak): check if database already has correct schema. if not,
-    # initialize tables
-
+    if db.schema == "":
+        # db is uninitialized, create tables
+        print("ayy lmao")
+    else:
+        # db is already initialized, continue
+        # logger.error("Incorrect schema version: %s", db.schema)
+        # raise click.ClickException("Incorrect database schema version.")
+        print("lmao ayy")
+ 
     errors = False
     # TODO(skowalak): For which locale are we crawling? What form do log
     # filenames have there? -> CLI flag with default value.
-    files = utils.crawl_directory_for_rooms(chat_files)
+    if chat_files.is_dir():
+        files = utils.crawl_directory_for_rooms(chat_files)
+    else:
+        files = [chat_files]
     for file in files:
         try:
             room = utils.parse_room_file(file)
+            utils.debug_dump(room)
         except Exception as error:
             logger.warning("Uncaught exception during parsing: %s", str(error))
             errors = True

@@ -2,7 +2,9 @@ from arpeggio import *
 from arpeggio.cleanpeg import ParserPEG
 from arpeggio import RegExMatch as _
 
+import types
 from datetime import datetime
+from typing import List
 from warnings import warn
 from zoneinfo import ZoneInfo
 
@@ -31,6 +33,12 @@ from whatsapp_to_sqlite.messages import (
     RoomNumberChangeWithNumber,
     RoomNumberChangeWithoutNumber,
 )
+
+
+class MessageParser(ParserPython):
+
+    def __init__(self, *args, skipws=False, memoization=True, **kwargs):
+        super().__init__(*args, skipws=skipws, memoization=memoization, **kwargs)
 
 
 ###############################################################################
@@ -282,6 +290,10 @@ def admin_promotion():
 
 
 class MessageVisitor(PTNodeVisitor):
+    
+    def visit(self, parse_tree):
+        return visit_parse_tree(parse_tree, self)
+
     def visit_timestamp(self, node, children):
         # prepend century (thank god whatsapp did not exist before 2000 a.D.
         century = "20"
@@ -416,10 +428,3 @@ class MessageVisitor(PTNodeVisitor):
     def visit_log(self, node, children):
         return children
 
-
-def parse(f) -> list[Message]:
-    logstring = f.read()
-    parser = ParserPython(log, skipws=False, debug=False, memoization=True)
-    parse_tree = parser.parse(logstring)
-    result = visit_parse_tree(parse_tree, MessageVisitor(debug=True))
-    return result

@@ -5,17 +5,32 @@ import hashlib
 import os
 import sqlite_utils
 
+from whatsapp_to_sqlite.arPEGgio import (
+    MessageParser,
+    MessageVisitor,
+    visit_parse_tree,
+    log,
+)
+from whatsapp_to_sqlite.events import (
+    Event,
+    RoomCreateEvent,
+)
 from whatsapp_to_sqlite.messages import (
     Message,
     RoomCreateByThirdParty,
 )
-from whatsapp_to_sqlite.events import (
-    RoomCreateEvent,
-)
 
 
-def parse_room_file(absolute_file_path: str) -> list[dict]:
-    pass
+def parse_string(string: str) -> List[Message]:
+    """Parse a single string using arpeggio grammar definition."""
+    parse_tree = MessageParser(log).parse(string)
+    return MessageVisitor().visit(parse_tree)
+
+
+def parse_room_file(absolute_file_path: str) -> List[Message]:
+    with open(absolute_file_path, "r", encoding="utf-8") as room_file:
+        string = room_file.read()
+        return parse_string(string)
 
 
 def save_messages(message, db):
@@ -48,8 +63,8 @@ def crawl_directory_for_rooms(path: str) -> list[str]:
 
 def get_hash(filepath: str):
     hash_obj = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(2048), b""):
+    with open(filepath, "rb") as file_obj:
+        for chunk in iter(lambda: file_obj.read(2048), b""):
             hash_obj.update(chunk)
     return hash_obj.hexdigest()
 
@@ -90,3 +105,17 @@ def transform(messages: List[Message], room_name: str, user_name: str):
             event = Event.of()
         elif isinstance(message, RoomCreateSelf):
             event = RoomCreateEvent(sender=user_name, room_name=room_name)
+
+
+def debug_dump(msglist: list) -> None:
+    import json
+    from datetime import datetime
+
+    def json_serial(obj):
+        if isinstance(obj, Message):
+            return obj.toDict()
+
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+
+    print(json.dumps(msglist, indent=2, default=json_serial, sort_keys=True))

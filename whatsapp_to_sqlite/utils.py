@@ -1,9 +1,13 @@
+from pathlib import Path
 from typing import List
 
 import base64
 import hashlib
 import os
-import sqlite_utils
+import re
+import uuid
+
+from sqlite_utils import Database
 
 from whatsapp_to_sqlite.arPEGgio import (
     MessageParser,
@@ -33,16 +37,34 @@ def parse_room_file(absolute_file_path: str) -> List[Message]:
         return parse_string(string)
 
 
-def save_messages(message, db):
-    pass
+def get_room_name(absolute_file_path: str) -> str:
+    file_path = Path(absolute_file_path)
+    # TODO(skowalak): internationalization of file names
+    room_name = re.search(r"WhatsApp Chat mit (.*)", file_path.stem).group(1)
+    return room_name
 
 
-def save_senders():
-    pass
 
 
-def save_rooms():
-    pass
+def save_message(message: Message, room_id: uuid.UUID, db: Database):
+    message_id = uuid.uuid4()
+
+    db["message"].insert()
+
+
+def save_sender(name: str) -> uuid.UUID:
+    # look up if sender name (assumed unique) already exists
+    #
+    # if yes, use the id, if no create new and use that id
+    return
+
+
+def save_room(room: List[Message], room_name: str, db: Database):
+    """Insert a room (list of messages in one room context) into the database."""
+    # create room
+    room_id = uuid.uuid4()
+
+    db["room"].insert()
 
 
 def save_file():

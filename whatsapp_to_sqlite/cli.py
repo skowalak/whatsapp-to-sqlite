@@ -27,7 +27,7 @@ def cli():
         dir_okay=True,
         allow_dash=True,
         resolve_path=True,
-        path_type=pathlib.Path
+        path_type=pathlib.Path,
     ),
     required=True,
 )
@@ -39,7 +39,7 @@ def cli():
         dir_okay=False,
         allow_dash=False,
         resolve_path=True,
-        path_type=pathlib.Path
+        path_type=pathlib.Path,
     ),
     required=False,
 )
@@ -47,10 +47,7 @@ def cli():
     "-d",
     "--data-directory",
     type=click.Path(
-        file_okay=False,
-        dir_okay=True,
-        allow_dash=False,
-        resolve_path=True
+        file_okay=False, dir_okay=True, allow_dash=False, resolve_path=True
     ),
     help=(
         "Path(s) which contain additional exported media. "
@@ -64,10 +61,7 @@ def cli():
     "--output-directory",
     default="messagedb_files",
     type=click.Path(
-        file_okay=False,
-        dir_okay=True,
-        allow_dash=False,
-        resolve_path=True
+        file_okay=False, dir_okay=True, allow_dash=False, resolve_path=True
     ),
     help=("Path to directory, where processed media will be stored."),
     required=False,
@@ -117,13 +111,71 @@ def run_import(
     db = sqlite_utils.Database(db_path)
     if db.schema == "":
         # db is uninitialized, create tables
-        print("ayy lmao")
+        # message table with discriminator on type
+        db["message"].create(
+            {
+                "id": bytes,
+                "timestamp": datetime.datetime,
+                "full_content": str,
+                "sender_id": bytes,  # fk
+                "room_id": bytes,  # fk
+                "depth": int,
+                "type": str,  # discriminator
+                "message_content": str,
+                "file": bool,
+                "file_id": bytes,
+                "target_user": bytes,  # fk
+                "new_room_name": str,
+                "new_number": str,
+            },
+            pk="id",
+            if_not_exists=True,
+        )
+        db["message_x_message"].create(
+            {"message_id": bytes, "parent_message_id": bytes},
+            pk=("message_id", "parent_message_id"),
+            if_not_exists=True,
+        )
+        db["room"].create(
+            {
+                "id": bytes,
+                "is_dm": bool,
+                "first_message": bytes,  # fk
+                "display_img": bytes,  # fk
+                "name": str,
+                "member_count": int,
+            },
+            pk="id",
+            if_not_exists=True,
+        )
+        db["file"].create(
+            {
+                "id": bytes,
+                "uri": bytes,
+                "filename": str,
+                "mime_type": str,
+                "preview": str,
+                "size": int,
+            },
+            pk="id",
+            if_not_exists=True,
+        )
+        db["sender"].create(
+            {
+                
+                "id": bytes,
+                "name": str,
+            },
+            pk="id",
+            if_not_exists=True,
+        )
+        # TODO(skowalak): init using separate init.sql? -> Better DB
     else:
         # db is already initialized, continue
         # logger.error("Incorrect schema version: %s", db.schema)
         # raise click.ClickException("Incorrect database schema version.")
         print("lmao ayy")
- 
+
     errors = False
     # TODO(skowalak): For which locale are we crawling? What form do log
     # filenames have there? -> CLI flag with default value.
@@ -134,6 +186,8 @@ def run_import(
     for file in files:
         try:
             room = utils.parse_room_file(file)
+            room_name = utils.get_room_name(file)
+            utils.save_room(room, room_name, db)
             utils.debug_dump(room)
         except Exception as error:
             logger.warning("Uncaught exception during parsing: %s", str(error))

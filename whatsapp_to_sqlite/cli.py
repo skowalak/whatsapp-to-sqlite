@@ -129,11 +129,20 @@ def run_import(
                 "new_number": str,
             },
             pk="id",
+            foreign_keys=[
+                ("sender_id", "sender", "id"),
+                ("room_id", "room", "id"),
+                ("target_user", "sender", "id"),
+            ],
             if_not_exists=True,
         )
         db["message_x_message"].create(
             {"message_id": bytes, "parent_message_id": bytes},
             pk=("message_id", "parent_message_id"),
+            foreign_keys=[
+                ("message_id", "message", "id"),
+                ("parent_message_id", "message", "id"),
+            ],
             if_not_exists=True,
         )
         db["room"].create(
@@ -146,6 +155,10 @@ def run_import(
                 "member_count": int,
             },
             pk="id",
+            foreign_keys=[
+                ("first_message", "message", "id"),
+                ("display_img", "file", "id"),
+            ],
             if_not_exists=True,
         )
         db["file"].create(
@@ -162,7 +175,6 @@ def run_import(
         )
         db["sender"].create(
             {
-                
                 "id": bytes,
                 "name": str,
             },

@@ -21,7 +21,18 @@ from whatsapp_to_sqlite.events import (
 )
 from whatsapp_to_sqlite.messages import (
     Message,
+    RoomCreateBySelf,
     RoomCreateByThirdParty,
+    RoomJoinThirdPartyBySelf,
+    RoomJoinThirdPartyByThirdParty,
+    RoomJoinThirdPartyByUnknown,
+    RoomKickThirdPartyBySelf,
+    RoomKickThirdPartyByThirdParty,
+    RoomKickThirdPartyByUnknown,
+    RoomMessage,
+    RoomNameBySelf,
+    RoomNameByThirdParty,
+    RoomNumberChangeWithNumber,
 )
 
 
@@ -44,19 +55,80 @@ def get_room_name(absolute_file_path: str) -> str:
     return room_name
 
 
+def save_message(
+    message: Message, room_id: uuid.UUID, depth: int, db: Database
+) -> uuid.UUID:
+    # FIXME(skowalak): Events by Self do not always have a sender id? Just create random?
+    # FIXME(skowalak): Maybe just use a configurable uuid for all events without sender (only system events).
+    sender_id = save_sender(message.sender)
 
+    # TODO(skowalak): Into config
+    type_format = "com.github.com.skowalak.whatsapp-to-sqlite.{0}"
+    msg_w_user_content = [RoomMessage]
+    msg_w_target_user = [
+        RoomJoinThirdPartyByThirdParty,
+        RoomJoinThirdPartyByUnknown,
+        RoomJoinThirdPartyBySelf,
+        RoomKickThirdPartyByThirdParty,
+        RoomKickThirdPartyByUnknown,
+        RoomKickThirdPartyBySelf,
+    ]
+    msg_w_new_room_name = [
+        RoomCreateByThirdParty,
+        RoomCreateBySelf,
+        RoomNameBySelf,
+        RoomNameByThirdParty,
+    ]
+    msg_w_new_number = [RoomNumberChangeWithNumber]
 
-def save_message(message: Message, room_id: uuid.UUID, db: Database):
     message_id = uuid.uuid4()
+    file_id = None
+    message_file = False
+    message_text = None
+    message_target_user = None
+    message_new_room_name = None
+    message_new_number = None
 
-    db["message"].insert()
+    if message.__class__ in msg_w_user_content:
+        message_text = message.text
+        if message.continued_text:
+            message_text = message_text + "\n" + message.continued_text
+        if message.file:
+            message_file = True
+            file_id = save_file(message.filename, message.file_lost)
+
+    if message.__class__ in msg_w_target_user:
+        message_target_user = message.target_user
+
+    if message.__class__ in msg_w_new_room_name:
+        message_new_room_name = message.new_room_name
+
+    if message.__class__ in msg_w_new_number:
+        message_new_number = message.new_number
+
+    db["message"].insert(
+        {
+            "id": message_id.bytes,
+            "timestamp": message.timestamp,
+            "full_content": message.full_text,
+            "sender_id": sender_id,
+            "room_id": room_id,
+            "depth": depth,
+            "type": type_format.format(message.__class__.__name__),
+            "message_content": message_text,
+            "file": message_file,
+            "file_id": file_id,
+            "target_user": message_target_user,
+            "new_room_name": message_new_room_name,
+            "new_number": message_new_number,
+        }
+    )
+
+    return message_id
 
 
 def save_sender(name: str) -> uuid.UUID:
     # look up if sender name (assumed unique) already exists
-    #
-    # if yes, use the id, if no create new and use that id
-    return
 
 
 def save_room(room: List[Message], room_name: str, db: Database):

@@ -129,6 +129,18 @@ def save_message(
 
 def save_sender(name: str) -> uuid.UUID:
     # look up if sender name (assumed unique) already exists
+    sender_id = None
+    for pk, row in db["sender"].pks_and_rows_where("name = ?", [name]):
+        # if exists use id
+        sender_id = uuid.UUID(bytes=pk)
+        return sender_id
+
+    # if not exists create new and use that id
+    sender_id = uuid.uuid4()
+    db["sender"].insert({"id": sender_id.bytes, "name": name})
+    return sender_id
+
+
 
 
 def save_room(room: List[Message], room_name: str, db: Database):

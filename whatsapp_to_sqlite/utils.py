@@ -141,6 +141,22 @@ def save_sender(name: str) -> uuid.UUID:
     return sender_id
 
 
+def save_file(filename: str) -> uuid.UUID:
+    """Create every file (even with same name) as new file row. Dedup comes later."""
+    # TODO(skowalak): Iterate files later for hash generation, mime_type, etc.
+    file_id = uuid.uuid4()
+
+    db["file"].insert(
+        {
+            "id": file_id,
+            "uri": None,  # later
+            "filename": filename,
+            "mime_type": None,  # later
+            "preview": None,  # later
+            "size": None,  # later
+        }
+    )
+    return file_id
 
 
 def save_room(room: List[Message], room_name: str, db: Database):

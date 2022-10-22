@@ -55,12 +55,44 @@ def get_room_name(absolute_file_path: str) -> str:
     return room_name
 
 
+def save_room(room: List[Message], room_name: str, db: Database):
+    """Insert a room (list of messages in one room context) into the database."""
+    if not room:
+        return
+
+    # create room
+    room_id = uuid.uuid4()
+
+    # check if first message in room matches a group or a DM
+    # TODO(skowalak): do it
+    room_is_dm = False
+
+    message_ids = []
+    for depth, message in enumerate(room, start=1):
+        message_id = save_message(message, room_id, depth, db)
+        message_ids.append(message_id)
+
+    for idx, message_id in enumerate(message_ids[1:]):
+        save_message_relationship(message_ids[idx], message_id, db)
+
+    db["room"].insert(
+        {
+            "id": room_id.bytes,
+            "is_dm": room_is_dm,
+            "first_message": message_ids[0].bytes,
+            "display_img": None,
+            "name": room_name,
+            "member_count": 0,
+        }
+    )
+
+
 def save_message(
     message: Message, room_id: uuid.UUID, depth: int, db: Database
 ) -> uuid.UUID:
     # FIXME(skowalak): Events by Self do not always have a sender id? Just create random?
     # FIXME(skowalak): Maybe just use a configurable uuid for all events without sender (only system events).
-    sender_id = save_sender(message.sender)
+    sender_id = save_sender(message.sender, db).bytes
 
     # TODO(skowalak): Into config
     type_format = "com.github.com.skowalak.whatsapp-to-sqlite.{0}"
@@ -95,10 +127,10 @@ def save_message(
             message_text = message_text + "\n" + message.continued_text
         if message.file:
             message_file = True
-            file_id = save_file(message.filename, message.file_lost)
+            file_id = save_file(message.filename, db).bytes
 
     if message.__class__ in msg_w_target_user:
-        message_target_user = message.target_user
+        message_target_user = save_sender(message.target_user).bytes
 
     if message.__class__ in msg_w_new_room_name:
         message_new_room_name = message.new_room_name
@@ -112,7 +144,7 @@ def save_message(
             "timestamp": message.timestamp,
             "full_content": message.full_text,
             "sender_id": sender_id,
-            "room_id": room_id,
+            "room_id": room_id.bytes,
             "depth": depth,
             "type": type_format.format(message.__class__.__name__),
             "message_content": message_text,
@@ -127,7 +159,15 @@ def save_message(
     return message_id
 
 
-def save_sender(name: str) -> uuid.UUID:
+def save_message_relationship(
+    message_id: uuid.UUID, parent_message_id: uuid.UUID, db: Database
+):
+    db["message_x_message"].insert(
+        {"message_id": message_id.bytes, "parent_message_id": parent_message_id.bytes}
+    )
+
+
+def save_sender(name: str, db: Database) -> uuid.UUID:
     # look up if sender name (assumed unique) already exists
     sender_id = None
     for pk, row in db["sender"].pks_and_rows_where("name = ?", [name]):
@@ -141,7 +181,7 @@ def save_sender(name: str) -> uuid.UUID:
     return sender_id
 
 
-def save_file(filename: str) -> uuid.UUID:
+def save_file(filename: str, db: Database) -> uuid.UUID:
     """Create every file (even with same name) as new file row. Dedup comes later."""
     # TODO(skowalak): Iterate files later for hash generation, mime_type, etc.
     file_id = uuid.uuid4()
@@ -157,14 +197,6 @@ def save_file(filename: str) -> uuid.UUID:
         }
     )
     return file_id
-
-
-def save_room(room: List[Message], room_name: str, db: Database):
-    """Insert a room (list of messages in one room context) into the database."""
-    # create room
-    room_id = uuid.uuid4()
-
-    db["room"].insert()
 
 
 def save_file():

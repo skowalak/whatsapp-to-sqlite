@@ -4,6 +4,7 @@ import os
 import pathlib
 import shutil
 import time
+import uuid
 
 import click
 import sqlite_utils
@@ -129,11 +130,6 @@ def run_import(
                 "new_number": str,
             },
             pk="id",
-            foreign_keys=[
-                ("sender_id", "sender", "id"),
-                ("room_id", "room", "id"),
-                ("target_user", "sender", "id"),
-            ],
             if_not_exists=True,
         )
         db["message_x_message"].create(
@@ -143,6 +139,18 @@ def run_import(
                 ("message_id", "message", "id"),
                 ("parent_message_id", "message", "id"),
             ],
+            if_not_exists=True,
+        )
+        db["file"].create(
+            {
+                "id": bytes,
+                "uri": bytes,
+                "filename": str,
+                "mime_type": str,
+                "preview": str,
+                "size": int,
+            },
+            pk="id",
             if_not_exists=True,
         )
         db["room"].create(
@@ -161,18 +169,6 @@ def run_import(
             ],
             if_not_exists=True,
         )
-        db["file"].create(
-            {
-                "id": bytes,
-                "uri": bytes,
-                "filename": str,
-                "mime_type": str,
-                "preview": str,
-                "size": int,
-            },
-            pk="id",
-            if_not_exists=True,
-        )
         db["sender"].create(
             {
                 "id": bytes,
@@ -181,25 +177,32 @@ def run_import(
             pk="id",
             if_not_exists=True,
         )
+        db["system_message_id"].create({"id": int, "system_message_id": bytes})
+        db["message"].add_foreign_key("sender_id", "sender", "id")
+        db["message"].add_foreign_key("room_id", "room", "id")
+        db["message"].add_foreign_key("target_user", "sender", "id")
         # TODO(skowalak): init using separate init.sql? -> Better DB
     else:
         # db is already initialized, continue
         # logger.error("Incorrect schema version: %s", db.schema)
         # raise click.ClickException("Incorrect database schema version.")
-        print("lmao ayy")
+        logger.debug("database already initialized: %s", db.schema)
 
     errors = False
+    system_message_id = utils.get_system_message_id(db)
     # TODO(skowalak): For which locale are we crawling? What form do log
     # filenames have there? -> CLI flag with default value.
     if chat_files.is_dir():
-        files = utils.crawl_directory_for_rooms(chat_files)
+        files = utils.crawl_directory_for_rooms(chat_files, "WhatsApp Chat mit *.txt")
     else:
         files = [chat_files]
+
+    system_message_id = db["system_message_id"].get(1)
     for file in files:
         try:
             room = utils.parse_room_file(file)
             room_name = utils.get_room_name(file)
-            utils.save_room(room, room_name, db)
+            utils.save_room(room, room_name, system_message_id, db)
             utils.debug_dump(room)
         except Exception as error:
             logger.warning("Uncaught exception during parsing: %s", str(error))

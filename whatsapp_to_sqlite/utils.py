@@ -8,6 +8,7 @@ import re
 import uuid
 
 from sqlite_utils import Database
+from sqlite_utils.db import NotFoundError
 
 from whatsapp_to_sqlite.arPEGgio import (
     MessageParser,
@@ -55,7 +56,9 @@ def get_room_name(absolute_file_path: str) -> str:
     return room_name
 
 
-def save_room(room: List[Message], room_name: str, db: Database):
+def save_room(
+    room: List[Message], room_name: str, system_message_id: uuid.UUID, db: Database
+):
     """Insert a room (list of messages in one room context) into the database."""
     if not room:
         return
@@ -69,7 +72,7 @@ def save_room(room: List[Message], room_name: str, db: Database):
 
     message_ids = []
     for depth, message in enumerate(room, start=1):
-        message_id = save_message(message, room_id, depth, db)
+        message_id = save_message(message, room_id, depth, system_message_id, db)
         message_ids.append(message_id)
 
     for idx, message_id in enumerate(message_ids[1:]):
@@ -88,11 +91,16 @@ def save_room(room: List[Message], room_name: str, db: Database):
 
 
 def save_message(
-    message: Message, room_id: uuid.UUID, depth: int, db: Database
+    message: Message,
+    room_id: uuid.UUID,
+    depth: int,
+    system_message_id: uuid.UUID,
+    db: Database,
 ) -> uuid.UUID:
-    # FIXME(skowalak): Events by Self do not always have a sender id? Just create random?
-    # FIXME(skowalak): Maybe just use a configurable uuid for all events without sender (only system events).
-    sender_id = save_sender(message.sender, db)
+    if hasattr(message, "sender"):
+        sender_id = save_sender(message.sender, db)
+    else:
+        sender_id = system_message_id
 
     # TODO(skowalak): Into config
     type_format = "com.github.com.skowalak.whatsapp-to-sqlite.{0}"
@@ -199,14 +207,23 @@ def save_file(filename: str, db: Database) -> uuid.UUID:
     return file_id
 
 
-def crawl_directory_for_rooms(path: str) -> list[str]:
-    path = os.path.abspath(path)
+def get_system_message_id(db: Database) -> uuid.UUID:
+    try:
+        system_message_id_bytes = db["system_message_id"].get(1)
+    except NotFoundError:
+        system_message_id = uuid.uuid4()
+        db["system_message_id"].insert(
+            {"id": 1, "system_message_id": system_message_id.bytes}
+        )
+        return system_message_id
+
+    return uuid.UUID(bytes=system_message_id_bytes)
+
+
+def crawl_directory_for_rooms(path: Path, file_name_glob: str) -> List[Path]:
     file_list = []
-    # iterate over all files in directory
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            if file.endswith(".txt"):
-                file_list.append(os.path.join(root, file))
+    for glob_path in path.glob(f"**/{file_name_glob}"):
+        file_list.append(glob_path)
 
     return file_list
 

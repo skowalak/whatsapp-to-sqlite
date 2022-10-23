@@ -36,7 +36,6 @@ from whatsapp_to_sqlite.messages import (
 
 
 class MessageParser(ParserPython):
-
     def __init__(self, *args, skipws=False, memoization=True, **kwargs):
         super().__init__(*args, skipws=skipws, memoization=memoization, **kwargs)
 
@@ -290,7 +289,6 @@ def admin_promotion():
 
 
 class MessageVisitor(PTNodeVisitor):
-    
     def visit(self, parse_tree):
         return visit_parse_tree(parse_tree, self)
 
@@ -327,10 +325,10 @@ class MessageVisitor(PTNodeVisitor):
         return RoomCreateBySelf(new_room_name=children[0])
 
     def visit_room_join_t_t(self, node, children):
-        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=c[1])
+        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=children[1])
 
     def visit_room_join_t_t(self, node, children):
-        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=c[1])
+        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=children[1])
 
     def visit_room_join_t_t2(self, node, children):
         return RoomJoinThirdPartyByUnknown(target=children[0])
@@ -427,4 +425,3 @@ class MessageVisitor(PTNodeVisitor):
 
     def visit_log(self, node, children):
         return children
-

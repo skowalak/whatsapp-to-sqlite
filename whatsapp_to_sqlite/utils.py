@@ -133,6 +133,8 @@ def save_message(
         message_text = message.text
         if message_text and message.continued_text:
             message_text = message_text + "\n" + message.continued_text
+        elif not message_text and message.continued_text:
+            message_text = message.continued_text
         if message.file:
             message_file = True
             file_id = save_file(message.filename, db)

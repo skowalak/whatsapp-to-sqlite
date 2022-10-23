@@ -340,7 +340,7 @@ class MessageVisitor(PTNodeVisitor):
         return RoomJoinThirdPartyBySelf(target=children[0])
 
     def visit_room_kick_t_t(self, node, children):
-        return RoomKickThirdPartyByThirdParty(sender=children[0], target=c[1])
+        return RoomKickThirdPartyByThirdParty(sender=children[0], target=children[1])
 
     def visit_room_kick_t_t2(self, node, children):
         return RoomKickThirdPartyByUnknown(target=children[0])
@@ -363,8 +363,8 @@ class MessageVisitor(PTNodeVisitor):
     def visit_number_change2(self, node, children):
         return RoomNumberChangeWithoutNumber(sender=children[0])
 
-    def visit_room_name_t(self, node, c):
-        return RoomNameByThirdParty(sender=c[0], new_room_name=c[1])
+    def visit_room_name_t(self, node, children):
+        return RoomNameByThirdParty(sender=children[0], new_room_name=children[1])
 
     def visit_room_name_f(self, node, children):
         return RoomNameBySelf(new_room_name=children[0])

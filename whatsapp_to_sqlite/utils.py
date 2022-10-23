@@ -92,7 +92,7 @@ def save_message(
 ) -> uuid.UUID:
     # FIXME(skowalak): Events by Self do not always have a sender id? Just create random?
     # FIXME(skowalak): Maybe just use a configurable uuid for all events without sender (only system events).
-    sender_id = save_sender(message.sender, db).bytes
+    sender_id = save_sender(message.sender, db)
 
     # TODO(skowalak): Into config
     type_format = "com.github.com.skowalak.whatsapp-to-sqlite.{0}"
@@ -127,10 +127,10 @@ def save_message(
             message_text = message_text + "\n" + message.continued_text
         if message.file:
             message_file = True
-            file_id = save_file(message.filename, db).bytes
+            file_id = save_file(message.filename, db)
 
     if message.__class__ in msg_w_target_user:
-        message_target_user = save_sender(message.target_user).bytes
+        message_target_user = save_sender(message.target_user)
 
     if message.__class__ in msg_w_new_room_name:
         message_new_room_name = message.new_room_name
@@ -143,14 +143,14 @@ def save_message(
             "id": message_id.bytes,
             "timestamp": message.timestamp,
             "full_content": message.full_text,
-            "sender_id": sender_id,
+            "sender_id": sender_id.bytes,
             "room_id": room_id.bytes,
             "depth": depth,
             "type": type_format.format(message.__class__.__name__),
             "message_content": message_text,
             "file": message_file,
-            "file_id": file_id,
-            "target_user": message_target_user,
+            "file_id": file_id.bytes if file_id else None,
+            "target_user": message_target_user.bytes if message_target_user else None,
             "new_room_name": message_new_room_name,
             "new_number": message_new_number,
         }
@@ -188,7 +188,7 @@ def save_file(filename: str, db: Database) -> uuid.UUID:
 
     db["file"].insert(
         {
-            "id": file_id,
+            "id": file_id.bytes,
             "uri": None,  # later
             "filename": filename,
             "mime_type": None,  # later
@@ -197,10 +197,6 @@ def save_file(filename: str, db: Database) -> uuid.UUID:
         }
     )
     return file_id
-
-
-def save_file():
-    pass
 
 
 def crawl_directory_for_rooms(path: str) -> list[str]:

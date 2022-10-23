@@ -131,14 +131,14 @@ def save_message(
 
     if message.__class__ in msg_w_user_content:
         message_text = message.text
-        if message.continued_text:
+        if message_text and message.continued_text:
             message_text = message_text + "\n" + message.continued_text
         if message.file:
             message_file = True
             file_id = save_file(message.filename, db)
 
     if message.__class__ in msg_w_target_user:
-        message_target_user = save_sender(message.target_user)
+        message_target_user = save_sender(message.target, db)
 
     if message.__class__ in msg_w_new_room_name:
         message_new_room_name = message.new_room_name
@@ -217,7 +217,7 @@ def get_system_message_id(db: Database) -> uuid.UUID:
         )
         return system_message_id
 
-    return uuid.UUID(bytes=system_message_id_bytes)
+    return uuid.UUID(bytes=system_message_id_bytes["system_message_id"])
 
 
 def crawl_directory_for_rooms(path: Path, file_name_glob: str) -> List[Path]:

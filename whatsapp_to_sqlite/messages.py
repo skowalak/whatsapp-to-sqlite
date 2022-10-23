@@ -141,3 +141,8 @@ class RoomNumberChangeWithNumber(SystemMessage):
 @dataclass
 class RoomNumberChangeWithoutNumber(SystemMessage):
     pass
+
+
+@dataclass
+class RoomE2EEnabledNotification(SystemMessage):
+    pass

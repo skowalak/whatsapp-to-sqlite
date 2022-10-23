@@ -10,8 +10,8 @@ from zoneinfo import ZoneInfo
 
 from whatsapp_to_sqlite.messages import (
     Message,
-    RoomAdminPromotion,
     RoomAvatarChangeBySelf,
+    RoomAdminPromotion,
     RoomAvatarChangeByThirdParty,
     RoomAvatarDeleteBySelf,
     RoomAvatarDeleteByThirdParty,
@@ -32,6 +32,7 @@ from whatsapp_to_sqlite.messages import (
     RoomNameByThirdParty,
     RoomNumberChangeWithNumber,
     RoomNumberChangeWithoutNumber,
+    RoomE2EEnabledNotification,
 )
 
 
@@ -149,6 +150,7 @@ def system_event():
         room_avatar_delete_t,
         room_avatar_delete_f,
         admin_promotion,
+        room_e2e_enabled_notification,
         #        any_text_with_newline
     ]
 
@@ -283,6 +285,13 @@ def admin_promotion():
     return "Du bist jetzt ein Admin.\n"
 
 
+def room_e2e_enabled_notification():
+    return (
+        "Nachrichten, die du in diesem Chat sendest, sowie Anrufe, sind "
+        "jetzt mit Ende-zu-Ende-Verschlüsselung geschützt. Tippe für mehr Infos.\n"
+    )
+
+
 ###############################################################################
 # End of Grammar Definition
 ###############################################################################
@@ -323,9 +332,6 @@ class MessageVisitor(PTNodeVisitor):
 
     def visit_room_create_f(self, node, children):
         return RoomCreateBySelf(new_room_name=children[0])
-
-    def visit_room_join_t_t(self, node, children):
-        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=children[1])
 
     def visit_room_join_t_t(self, node, children):
         return RoomJoinThirdPartyByThirdParty(sender=children[0], target=children[1])
@@ -383,6 +389,9 @@ class MessageVisitor(PTNodeVisitor):
 
     def visit_admin_promotion(self, node, children):
         return RoomAdminPromotion()
+
+    def visit_room_e2e_enabled_notification(self, node, children):
+        return RoomE2EEnabledNotification()
 
     # END system events
 

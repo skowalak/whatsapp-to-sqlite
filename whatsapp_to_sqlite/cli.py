@@ -199,14 +199,23 @@ def run_import(
 
     system_message_id = db["system_message_id"].get(1)
     for file in files:
+        room = None
         try:
-            room = utils.parse_room_file(file)
+            logger.debug("Starting to parse file %s.", file)
             room_name = utils.get_room_name(file)
-            utils.save_room(room, room_name, system_message_id, db)
-            utils.debug_dump(room)
+            logger.debug("Found room: %s.", room_name)
+            room = utils.parse_room_file(file)
         except Exception as error:
             logger.warning("Uncaught exception during parsing: %s", str(error))
             errors = True
+        try:
+            utils.save_room(room, room_name, system_message_id, db)
+            # utils.debug_dump(room)
+        except Exception as error:
+            # FIXME(skowalak): Remove this clause completely
+            logger.error("Uncaught error while saving: %s", str(error))
+            errors = True
+
     if force_erase and not errors:
         # TODO(skowalak): save files that have been successfully imported so we
         # don't erase rooms that failed with errors.

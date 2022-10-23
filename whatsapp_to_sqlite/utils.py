@@ -73,7 +73,7 @@ def save_room(room: List[Message], room_name: str, db: Database):
         message_ids.append(message_id)
 
     for idx, message_id in enumerate(message_ids[1:]):
-        save_message_relationship(message_ids[idx], message_id, db)
+        save_message_relationship(message_id, message_ids[idx], db)
 
     db["room"].insert(
         {

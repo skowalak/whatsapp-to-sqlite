@@ -71,18 +71,26 @@ def save_room(
     room_is_dm = False
 
     message_ids = []
+    first_message_id = None
+    last_message_id = None
+    print("before loop")
     for depth, message in enumerate(room, start=1):
         message_id = save_message(message, room_id, depth, system_message_id, db)
-        message_ids.append(message_id)
 
-    for idx, message_id in enumerate(message_ids[1:]):
-        save_message_relationship(message_id, message_ids[idx], db)
+        if not first_message_id:
+            first_message_id = message_id
+
+        if last_message_id:
+            save_message_relationship(message_id, last_message_id, db)
+
+        last_message_id = message_id
+    print("after_loop")
 
     db["room"].insert(
         {
             "id": room_id.bytes,
             "is_dm": room_is_dm,
-            "first_message": message_ids[0].bytes,
+            "first_message": first_message_id.bytes,
             "display_img": None,
             "name": room_name,
             "member_count": 0,

@@ -328,19 +328,23 @@ class MessageVisitor(PTNodeVisitor):
         return node
 
     def visit_room_create_t(self, node, children):
-        return RoomCreateByThirdParty(sender=children[0], new_room_name=children[1])
+        # FIXME(skowalak): Find out for which messages the U+200E applies
+        sender = children[0].lstrip("\u200e")
+        return RoomCreateByThirdParty(sender=sender, new_room_name=children[1])
 
     def visit_room_create_f(self, node, children):
         return RoomCreateBySelf(new_room_name=children[0])
 
     def visit_room_join_t_t(self, node, children):
-        return RoomJoinThirdPartyByThirdParty(sender=children[0], target=children[1])
+        sender = children[0].lstrip("\u200e")
+        return RoomJoinThirdPartyByThirdParty(sender=sender, target=children[1])
 
     def visit_room_join_t_t2(self, node, children):
         return RoomJoinThirdPartyByUnknown(target=children[0])
 
     def visit_room_join_t_f(self, node, children):
-        return RoomJoinSelfByThirdParty(sender=children[0])
+        sender = children[0].lstrip("\u200e")
+        return RoomJoinSelfByThirdParty(sender=sender)
 
     def visit_room_join_f_t(self, node, children):
         return RoomJoinThirdPartyBySelf(target=children[0])
@@ -376,7 +380,8 @@ class MessageVisitor(PTNodeVisitor):
         return RoomNameBySelf(new_room_name=children[0])
 
     def visit_room_avatar_t(self, node, children):
-        return RoomAvatarChangeByThirdParty(sender=children[0])
+        sender = children[0].lstrip("\u200e")
+        return RoomAvatarChangeByThirdParty(sender=sender)
 
     def visit_room_avatar_f(self, node, children):
         return RoomAvatarChangeBySelf()

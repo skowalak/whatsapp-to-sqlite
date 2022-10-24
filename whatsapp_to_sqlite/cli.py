@@ -19,7 +19,7 @@ def cli():
     """
 
 
-@cli.command(name="import")
+@cli.command(name="import-chats")
 @click.argument(
     "chat_files",
     type=click.Path(
@@ -44,35 +44,6 @@ def cli():
     required=False,
 )
 @click.option(
-    "-d",
-    "--data-directory",
-    type=click.Path(
-        file_okay=False, dir_okay=True, allow_dash=False, resolve_path=True
-    ),
-    help=(
-        "Path(s) which contain additional exported media. "
-        "If left empty images, videos, files and voice memos "
-        "will not be processed."
-    ),
-    required=False,
-)
-@click.option(
-    "-o",
-    "--output-directory",
-    default="messagedb_files",
-    type=click.Path(
-        file_okay=False, dir_okay=True, allow_dash=False, resolve_path=True
-    ),
-    help=("Path to directory, where processed media will be stored."),
-    required=False,
-)
-@click.option(
-    "-e",
-    "--force-erase",
-    is_flag=True,
-    help="Erase media files after exporting them to target directory.",
-)
-@click.option(
     "-v",
     "--verbose",
     is_flag=True,
@@ -81,9 +52,6 @@ def cli():
 def run_import(
     chat_files: pathlib.Path,
     db_path: pathlib.Path,
-    data_directory,
-    output_directory,
-    force_erase=False,
     verbose=False,
 ):
     """
@@ -228,21 +196,6 @@ def run_import(
                 logger.error("Uncaught error while saving: %s", str(error))
                 errors = True
 
-    # all rooms have been imported, now check the files
-    if data_directory and data_directory.exists():
-        logger.debug("Data directory %s specified. Searching now.", data_directory)
-        files = utils.crawl_directory(data_directory)
-        # TODO(skowalak): duplicate filenames? issue warning here or handle
-        logger.debug("Found %s files.", len(files))
-        logger.debug("Updating file info in db")
-        update_all_files(files)
-
-    if force_erase and not errors:
-        # TODO(skowalak): save files that have been successfully imported so we
-        # don't erase rooms that failed with errors.
-        # TODO(skowalak): Maybe populate a table with filenames and hashes?
-        logger.info("Erasing imported data")
-
     if errors:
         print(
             (
@@ -251,3 +204,92 @@ def run_import(
                 "option"
             )
         )
+
+
+@cli.command(name="import-media")
+@click.argument(
+    "data_directory",
+    type=click.Path(
+        file_okay=True,
+        dir_okay=True,
+        allow_dash=True,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    required=True,
+)
+@click.argument(
+    "db_path",
+    default="messagedb.sqlite3",
+    type=click.Path(
+        file_okay=True,
+        dir_okay=False,
+        allow_dash=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    required=False,
+)
+@click.option(
+    "-o",
+    "--output-directory",
+    default="messagedb_files",
+    type=click.Path(
+        file_okay=False, dir_okay=True, allow_dash=False, resolve_path=True
+    ),
+    help=("Path to directory, where processed media will be copied to."),
+    required=False,
+)
+@click.option(
+    "-e",
+    "--force-erase",
+    is_flag=True,
+    help="Erase media files after exporting them to target directory.",
+)
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Be more verbose when logging errors.",
+)
+def run_media_import(
+    data_directory: pathlib.Path,
+    db_path: pathlib.Path,
+    output_directory,
+    force_erase=False,
+    verbose=False,
+):
+    """
+    Import a media file or a directory of media files into an existing SQLite3
+    message database at DB_PATH.
+   
+    If an output directory is specified, imported media will be renamed and
+    copied there.
+    """
+    loglevel = logging.INFO if not verbose else logging.DEBUG
+    logging.basicConfig(format="%(message)s", level=loglevel)
+    logger = logging.getLogger(__name__)
+    logger.debug(
+        "db path: %s, data dir: %s", db_path, data_directory
+    )
+    if db_path.exists():
+        logger.info("Database found at %s.", db_path)
+
+        if data_directory and data_directory.exists():
+            logger.debug("Data directory %s specified. Searching now.", data_directory)
+            files = utils.crawl_directory(data_directory)
+            # TODO(skowalak): duplicate filenames? issue warning here or handle
+            logger.debug("Found %s files.", len(files))
+            logger.debug("Updating file info in db")
+            update_all_files(files)
+
+        if force_erase and not errors:
+            # TODO(skowalak): save files that have been successfully imported so we
+            # don't erase rooms that failed with errors.
+            # TODO(skowalak): Maybe populate a table with filenames and hashes?
+            logger.info("Erasing imported data")
+
+
+    else:
+        logger.error("Database file does not exist: %s", db_path)
+        exit(-1)

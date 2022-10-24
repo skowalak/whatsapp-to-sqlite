@@ -25,7 +25,7 @@ def cli():
     type=click.Path(
         file_okay=True,
         dir_okay=True,
-        allow_dash=True,
+        allow_dash=False,
         resolve_path=True,
         path_type=pathlib.Path,
     ),
@@ -212,7 +212,7 @@ def run_import(
     type=click.Path(
         file_okay=True,
         dir_okay=True,
-        allow_dash=True,
+        allow_dash=False,
         resolve_path=True,
         path_type=pathlib.Path,
     ),

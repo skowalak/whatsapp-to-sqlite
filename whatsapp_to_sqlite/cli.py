@@ -4,7 +4,6 @@ import os
 import pathlib
 import shutil
 import time
-import uuid
 
 import click
 import sqlite_utils
@@ -118,14 +117,14 @@ def run_import(
                 "id": bytes,
                 "timestamp": datetime.datetime,
                 "full_content": str,
-                "sender_id": bytes,  # fk
-                "room_id": bytes,  # fk
+                "sender_id": bytes,
+                "room_id": bytes,
                 "depth": int,
                 "type": str,  # discriminator
                 "message_content": str,
                 "file": bool,
                 "file_id": bytes,
-                "target_user": bytes,  # fk
+                "target_user": bytes,
                 "new_room_name": str,
                 "new_number": str,
             },
@@ -144,7 +143,7 @@ def run_import(
         db["file"].create(
             {
                 "id": bytes,
-                "uri": bytes,
+                "sha512sum": bytes,
                 "filename": str,
                 "mime_type": str,
                 "preview": str,
@@ -157,8 +156,8 @@ def run_import(
             {
                 "id": bytes,
                 "is_dm": bool,
-                "first_message": bytes,  # fk
-                "display_img": bytes,  # fk
+                "first_message": bytes,
+                "display_img": bytes,
                 "name": str,
                 "member_count": int,
             },
@@ -178,10 +177,12 @@ def run_import(
             if_not_exists=True,
         )
         db["system_message_id"].create({"id": int, "system_message_id": bytes})
+
+        # add foreign keys for circular references
         db["message"].add_foreign_key("sender_id", "sender", "id")
         db["message"].add_foreign_key("room_id", "room", "id")
         db["message"].add_foreign_key("target_user", "sender", "id")
-        # TODO(skowalak): init using separate init.sql? -> Better DB
+        # TODO(skowalak): eval init using separate init.sql? -> Better DB
     else:
         # db is already initialized, continue
         # logger.error("Incorrect schema version: %s", db.schema)
@@ -193,28 +194,47 @@ def run_import(
     # TODO(skowalak): For which locale are we crawling? What form do log
     # filenames have there? -> CLI flag with default value.
     if chat_files.is_dir():
-        files = utils.crawl_directory_for_rooms(chat_files, "WhatsApp Chat mit *.txt")
+        files = utils.crawl_directory(
+            chat_files, file_name_glob="WhatsApp Chat mit *.txt"
+        )
     else:
         files = [chat_files]
 
     system_message_id = db["system_message_id"].get(1)
-    for file in files:
-        room = None
-        try:
-            logger.debug("Starting to parse file %s.", file)
-            room_name = utils.get_room_name(file)
-            logger.debug("Found room: %s.", room_name)
-            room = utils.parse_room_file(file)
-        except Exception as error:
-            logger.warning("Uncaught exception during parsing: %s", str(error))
-            errors = True
-        try:
-            utils.save_room(room, room_name, system_message_id, db)
-            # utils.debug_dump(room)
-        except Exception as error:
-            # FIXME(skowalak): Remove this clause completely
-            logger.error("Uncaught error while saving: %s", str(error))
-            errors = True
+    logger.info("Parsing %s chat files.", len(files))
+    with click.progressbar(
+        length=len(files) * 2,
+        label="",
+        item_show_func=lambda x: x,
+    ) as bar_files:
+        for file in files:
+            room = None
+            try:
+                logger.debug("Starting to parse file %s.", file)
+                room_name = utils.get_room_name(file)
+                logger.debug("Found room: %s.", room_name)
+                room = utils.parse_room_file(file)
+                bar_files.update(1, f'Saving "{room_name}" to database.')
+            except Exception as error:
+                logger.warning("Uncaught exception during parsing: %s", str(error))
+                errors = True
+            try:
+                utils.save_room(room, room_name, system_message_id, db)
+                # utils.debug_dump(room)
+                bar_files.update(1)  # , f"Saving \"{room_name}\" to database.")
+            except Exception as error:
+                # FIXME(skowalak): Remove this clause completely
+                logger.error("Uncaught error while saving: %s", str(error))
+                errors = True
+
+    # all rooms have been imported, now check the files
+    if data_directory and data_directory.exists():
+        logger.debug("Data directory %s specified. Searching now.", data_directory)
+        files = utils.crawl_directory(data_directory)
+        # TODO(skowalak): duplicate filenames? issue warning here or handle
+        logger.debug("Found %s files.", len(files))
+        logger.debug("Updating file info in db")
+        update_all_files(files)
 
     if force_erase and not errors:
         # TODO(skowalak): save files that have been successfully imported so we

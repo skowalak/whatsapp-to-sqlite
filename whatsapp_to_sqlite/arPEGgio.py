@@ -404,7 +404,8 @@ class MessageVisitor(PTNodeVisitor):
         return {"file": True, "filename": None, "file_lost": True}
 
     def visit_file_attached(self, node, children):
-        return {"file": True, "filename": children[0], "file_lost": False}
+        filename = children[0].lstrip("\u200e")
+        return {"file": True, "filename": filename, "file_lost": False}
 
     def visit_message_text(self, node, children):
         return {"text": str(node)}

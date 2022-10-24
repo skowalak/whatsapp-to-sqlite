@@ -3,6 +3,7 @@ from typing import List
 
 import base64
 import hashlib
+import mimetypes
 import os
 import re
 import uuid
@@ -15,10 +16,6 @@ from whatsapp_to_sqlite.arPEGgio import (
     MessageVisitor,
     visit_parse_tree,
     log,
-)
-from whatsapp_to_sqlite.events import (
-    Event,
-    RoomCreateEvent,
 )
 from whatsapp_to_sqlite.messages import (
     Message,
@@ -43,8 +40,8 @@ def parse_string(string: str) -> List[Message]:
     return MessageVisitor().visit(parse_tree)
 
 
-def parse_room_file(absolute_file_path: str) -> List[Message]:
-    with open(absolute_file_path, "r", encoding="utf-8") as room_file:
+def parse_room_file(file_path: str) -> List[Message]:
+    with file_path.open("r", encoding="utf-8") as room_file:
         string = room_file.read()
         return parse_string(string)
 
@@ -73,7 +70,6 @@ def save_room(
     message_ids = []
     first_message_id = None
     last_message_id = None
-    print("before loop")
     for depth, message in enumerate(room, start=1):
         message_id = save_message(message, room_id, depth, system_message_id, db)
 
@@ -84,7 +80,6 @@ def save_room(
             save_message_relationship(message_id, last_message_id, db)
 
         last_message_id = message_id
-    print("after_loop")
 
     db["room"].insert(
         {
@@ -201,17 +196,16 @@ def save_sender(name: str, db: Database) -> uuid.UUID:
 
 def save_file(filename: str, db: Database) -> uuid.UUID:
     """Create every file (even with same name) as new file row. Dedup comes later."""
-    # TODO(skowalak): Iterate files later for hash generation, mime_type, etc.
     file_id = uuid.uuid4()
 
     db["file"].insert(
         {
             "id": file_id.bytes,
-            "uri": None,  # later
+            "sha512sum": None,
             "filename": filename,
-            "mime_type": None,  # later
-            "preview": None,  # later
-            "size": None,  # later
+            "mime_type": None,
+            "preview": None,
+            "size": None,
         }
     )
     return file_id
@@ -230,7 +224,7 @@ def get_system_message_id(db: Database) -> uuid.UUID:
     return uuid.UUID(bytes=system_message_id_bytes["system_message_id"])
 
 
-def crawl_directory_for_rooms(path: Path, file_name_glob: str) -> List[Path]:
+def crawl_directory(path: Path, file_name_glob: str = "*") -> List[Path]:
     file_list = []
     for glob_path in path.glob(f"**/{file_name_glob}"):
         file_list.append(glob_path)
@@ -238,12 +232,38 @@ def crawl_directory_for_rooms(path: Path, file_name_glob: str) -> List[Path]:
     return file_list
 
 
-def get_hash(filepath: str):
-    hash_obj = hashlib.sha256()
-    with open(filepath, "rb") as file_obj:
+def get_hash(file_path: Path) -> bytes:
+    hash_obj = hashlib.sha512()
+    with filepath.open("rb") as file_obj:
         for chunk in iter(lambda: file_obj.read(2048), b""):
             hash_obj.update(chunk)
-    return hash_obj.hexdigest()
+    return hash_obj.digest()
+
+
+def update_all_files(data_dir_files: List[Path], db: Database):
+    data_dir_filenames = {file.name: file for file in data_dir_files}
+    for row in db["file"].rows:
+        filename = row["filename"]
+        if filename and filename in data_dir_filenames.keys():
+            file_id = uuid.UUID(bytes=row["id"])
+
+            file = data_dir_filenames[filename]
+            file_sha512sum = get_hash(file)
+            file_mime_type, _ = mimetypes.guess_type(filename)
+            file_preview = None  # FIXME(skowalak): PIL/pillow?
+            file_size = file.stat().st_size
+
+            db["file"].update(
+                file_id.bytes,
+                {
+                    "id": file_id.bytes,
+                    "sha512sum": file_sha512sum,
+                    "filename": filename,
+                    "mime_type": file_mime_type,
+                    "preview": file_preview,
+                    "size": file_size,
+                },
+            )
 
 
 def sanitize_user_message(message: Message) -> List[Message]:
@@ -268,20 +288,6 @@ def sanitize_user_message(message: Message) -> List[Message]:
         return [first_message, second_message]
 
     return [message]
-
-
-def transform(messages: List[Message], room_name: str, user_name: str):
-    senders = []
-    for message in messages:
-        senders.append(message.sender)
-    events = []
-    for message in messages:
-        message.room_name = room_name
-
-        if isinstance(message, RoomCreateByThirdParty):
-            event = Event.of()
-        elif isinstance(message, RoomCreateSelf):
-            event = RoomCreateEvent(sender=user_name, room_name=room_name)
 
 
 def debug_dump(msglist: list) -> None:

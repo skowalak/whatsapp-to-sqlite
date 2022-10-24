@@ -197,13 +197,14 @@ def save_sender(name: str, db: Database) -> uuid.UUID:
 def save_file(filename: str, db: Database) -> uuid.UUID:
     """Create every file (even with same name) as new file row. Dedup comes later."""
     file_id = uuid.uuid4()
+    file_mime_type, _ = mimetypes.guess_type(filename)
 
     db["file"].insert(
         {
             "id": file_id.bytes,
             "sha512sum": None,
             "filename": filename,
-            "mime_type": None,
+            "mime_type": file_mime_type,
             "preview": None,
             "size": None,
         }
@@ -249,7 +250,6 @@ def update_all_files(data_dir_files: List[Path], db: Database):
 
             file = data_dir_filenames[filename]
             file_sha512sum = get_hash(file)
-            file_mime_type, _ = mimetypes.guess_type(filename)
             file_preview = None  # FIXME(skowalak): PIL/pillow?
             file_size = file.stat().st_size
 
@@ -258,8 +258,6 @@ def update_all_files(data_dir_files: List[Path], db: Database):
                 {
                     "id": file_id.bytes,
                     "sha512sum": file_sha512sum,
-                    "filename": filename,
-                    "mime_type": file_mime_type,
                     "preview": file_preview,
                     "size": file_size,
                 },

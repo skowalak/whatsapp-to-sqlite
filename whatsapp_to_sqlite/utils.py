@@ -83,9 +83,9 @@ def save_room(
 
     db["room"].insert(
         {
-            "id": room_id.bytes,
+            "id": str(room_id),
             "is_dm": room_is_dm,
-            "first_message": first_message_id.bytes,
+            "first_message": str(first_message_id),
             "display_img": None,
             "name": room_name,
             "member_count": 0,
@@ -153,17 +153,17 @@ def save_message(
 
     db["message"].insert(
         {
-            "id": message_id.bytes,
+            "id": str(message_id),
             "timestamp": message.timestamp,
             "full_content": message.full_text,
-            "sender_id": sender_id.bytes,
-            "room_id": room_id.bytes,
+            "sender_id": str(sender_id),
+            "room_id": str(room_id),
             "depth": depth,
             "type": type_format.format(message.__class__.__name__),
             "message_content": message_text,
             "file": message_file,
-            "file_id": file_id.bytes if file_id else None,
-            "target_user": message_target_user.bytes if message_target_user else None,
+            "file_id": str(file_id)if file_id else None,
+            "target_user": str(message_target_user) if message_target_user else None,
             "new_room_name": message_new_room_name,
             "new_number": message_new_number,
         }
@@ -176,7 +176,7 @@ def save_message_relationship(
     message_id: uuid.UUID, parent_message_id: uuid.UUID, db: Database
 ):
     db["message_x_message"].insert(
-        {"message_id": message_id.bytes, "parent_message_id": parent_message_id.bytes}
+        {"message_id": str(message_id), "parent_message_id": str(parent_message_id)}
     )
 
 
@@ -185,12 +185,12 @@ def save_sender(name: str, db: Database) -> uuid.UUID:
     sender_id = None
     for pk, row in db["sender"].pks_and_rows_where("name = ?", [name]):
         # if exists use id
-        sender_id = uuid.UUID(bytes=pk)
+        sender_id = uuid.UUID(pk)
         return sender_id
 
     # if not exists create new and use that id
     sender_id = uuid.uuid4()
-    db["sender"].insert({"id": sender_id.bytes, "name": name})
+    db["sender"].insert({"id": (sender_id), "name": name})
     return sender_id
 
 
@@ -203,7 +203,7 @@ def save_file(filename: str, db: Database) -> uuid.UUID:
 
     db["file"].insert(
         {
-            "id": file_id.bytes,
+            "id": str(file_id),
             "sha512sum": None,
             "name": filename,
             "mime_type": file_mime_type,
@@ -220,11 +220,11 @@ def get_system_message_id(db: Database) -> uuid.UUID:
     except NotFoundError:
         system_message_id = uuid.uuid4()
         db["system_message_id"].insert(
-            {"id": 1, "system_message_id": system_message_id.bytes}
+            {"id": 1, "system_message_id": str(system_message_id)}
         )
         return system_message_id
 
-    return uuid.UUID(bytes=system_message_id_bytes["system_message_id"])
+    return uuid.UUID(system_message_id_bytes["system_message_id"])
 
 
 def crawl_directory(path: Path, file_name_glob: str = "*") -> List[Path]:
@@ -248,7 +248,7 @@ def update_all_files(data_dir_files: List[Path], db: Database):
     for row in db["file"].rows:
         filename = row["name"]
         if filename and filename in data_dir_filenames.keys():
-            file_id = uuid.UUID(bytes=row["id"])
+            file_id = uuid.UUID(row["id"])
 
             file = data_dir_filenames[filename]
             file_sha512sum = get_hash(file)
@@ -256,9 +256,8 @@ def update_all_files(data_dir_files: List[Path], db: Database):
             file_size = file.stat().st_size
 
             db["file"].update(
-                file_id.bytes,
+                str(file_id),
                 {
-                    "id": file_id.bytes,
                     "sha512sum": file_sha512sum,
                     "preview": file_preview,
                     "size": file_size,

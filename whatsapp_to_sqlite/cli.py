@@ -81,17 +81,17 @@ def run_import(
         # message table with discriminator on type
         db["message"].create(
             {
-                "id": bytes,
+                "id": str,
                 "timestamp": datetime.datetime,
                 "full_content": str,
-                "sender_id": bytes,
-                "room_id": bytes,
+                "sender_id": str,
+                "room_id": str,
                 "depth": int,
                 "type": str,  # discriminator
                 "message_content": str,
                 "file": bool,
-                "file_id": bytes,
-                "target_user": bytes,
+                "file_id": str,
+                "target_user": str,
                 "new_room_name": str,
                 "new_number": str,
             },
@@ -99,7 +99,7 @@ def run_import(
             if_not_exists=True,
         )
         db["message_x_message"].create(
-            {"message_id": bytes, "parent_message_id": bytes},
+            {"message_id": str, "parent_message_id": str},
             pk=("message_id", "parent_message_id"),
             foreign_keys=[
                 ("message_id", "message", "id"),
@@ -109,8 +109,8 @@ def run_import(
         )
         db["file"].create(
             {
-                "id": bytes,
-                "sha512sum": bytes,
+                "id": str,
+                "sha512sum": str,
                 "name": str,
                 "mime_type": str,
                 "preview": str,
@@ -121,10 +121,10 @@ def run_import(
         )
         db["room"].create(
             {
-                "id": bytes,
+                "id": str,
                 "is_dm": bool,
-                "first_message": bytes,
-                "display_img": bytes,
+                "first_message": str,
+                "display_img": str,
                 "name": str,
                 "member_count": int,
             },
@@ -137,13 +137,13 @@ def run_import(
         )
         db["sender"].create(
             {
-                "id": bytes,
+                "id": str,
                 "name": str,
             },
             pk="id",
             if_not_exists=True,
         )
-        db["system_message_id"].create({"id": int, "system_message_id": bytes})
+        db["system_message_id"].create({"id": int, "system_message_id": str})
 
         # add foreign keys for circular references
         db["message"].add_foreign_key("sender_id", "sender", "id")

@@ -1,6 +1,6 @@
 from setuptools import setup
 import os
-VERSION = "0.1"
+VERSION = "0.1.2"
 
 def get_long_description():
     with open(
@@ -25,7 +25,7 @@ setup(
         [console_scripts]
         whatsapp-to-sqlite=whatsapp_to_sqlite.cli:cli
     """,
-    install_requires=["click", "sqlite-utils>=2.7.2", "arpeggio", "marshmallow"],
+    install_requires=["click", "sqlite-utils>=2.7.2", "arpeggio"],
     extras_require={"test": ["pytest"]},
     tests_require=["whatsapp-to-sqlite[test]"],
 )

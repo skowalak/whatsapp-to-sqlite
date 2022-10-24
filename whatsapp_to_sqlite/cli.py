@@ -1,9 +1,10 @@
 import datetime
 import logging
 import os
-import pathlib
 import shutil
 import time
+
+from pathlib import Path
 
 import click
 import sqlite_utils
@@ -27,7 +28,7 @@ def cli():
         dir_okay=True,
         allow_dash=False,
         resolve_path=True,
-        path_type=pathlib.Path,
+        path_type=Path,
     ),
     required=True,
 )
@@ -39,7 +40,7 @@ def cli():
         dir_okay=False,
         allow_dash=False,
         resolve_path=True,
-        path_type=pathlib.Path,
+        path_type=Path,
     ),
     required=False,
 )
@@ -50,8 +51,8 @@ def cli():
     help="Be more verbose when logging errors.",
 )
 def run_import(
-    chat_files: pathlib.Path,
-    db_path: pathlib.Path,
+    chat_files: Path,
+    db_path: Path,
     verbose=False,
 ):
     """
@@ -64,9 +65,7 @@ def run_import(
     loglevel = logging.INFO if not verbose else logging.DEBUG
     logging.basicConfig(format="%(message)s", level=loglevel)
     logger = logging.getLogger(__name__)
-    logger.debug(
-        "chats path: %s, db path: %s, data dir: %s", chat_files, db_path, data_directory
-    )
+    logger.debug("chats path: %s, db path: %s, data dir: %s", chat_files, db_path)
     if db_path.exists():
         logger.warning("Database file at %s already exists! Creating backup.", db_path)
         try:
@@ -197,54 +196,38 @@ def run_import(
                 errors = True
 
     if errors:
-        print(
-            (
-                "Warning: Errors occurred during import. No files were deleted."
-                "Check the logs for more info, and try to run again with the -v"
-                "option"
-            )
+        logger.warning(
+            "Warning: Errors occurred during import.\n"
+            "Check the logs for more info, and try to run again with the -v "
+            "option."
         )
 
 
 @cli.command(name="import-media")
 @click.argument(
     "data_directory",
-    type=click.Path(
-        file_okay=True,
-        dir_okay=True,
-        allow_dash=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
+    type=click.Path(resolve_path=True, path_type=Path),
     required=True,
 )
 @click.argument(
     "db_path",
     default="messagedb.sqlite3",
-    type=click.Path(
-        file_okay=True,
-        dir_okay=False,
-        allow_dash=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
+    type=click.Path(dir_okay=False, resolve_path=True, path_type=Path),
     required=False,
 )
 @click.option(
     "-o",
     "--output-directory",
     default="messagedb_files",
-    type=click.Path(
-        file_okay=False, dir_okay=True, allow_dash=False, resolve_path=True
-    ),
+    type=click.Path(file_okay=False, resolve_path=True, path_type=Path),
     help=("Path to directory, where processed media will be copied to."),
     required=False,
 )
 @click.option(
     "-e",
-    "--force-erase",
+    "--erase",
     is_flag=True,
-    help="Erase media files after exporting them to target directory.",
+    help="Generate list of erasable filenames after exporting them to target directory.",
 )
 @click.option(
     "-v",
@@ -253,25 +236,28 @@ def run_import(
     help="Be more verbose when logging errors.",
 )
 def run_media_import(
-    data_directory: pathlib.Path,
-    db_path: pathlib.Path,
+    data_directory: Path,
+    db_path: Path,
     output_directory,
-    force_erase=False,
+    erase=False,
     verbose=False,
 ):
     """
     Import a media file or a directory of media files into an existing SQLite3
     message database at DB_PATH.
-   
+
     If an output directory is specified, imported media will be renamed and
     copied there.
     """
     loglevel = logging.INFO if not verbose else logging.DEBUG
     logging.basicConfig(format="%(message)s", level=loglevel)
     logger = logging.getLogger(__name__)
+
+    logger.debug("db path: %s, data dir: %s", db_path, data_directory)
     logger.debug(
-        "db path: %s, data dir: %s", db_path, data_directory
+        "options: output_dir: %s, erase: %s, verbose %s", output_dir, erase, verbose
     )
+
     if db_path.exists():
         logger.info("Database found at %s.", db_path)
 
@@ -281,14 +267,10 @@ def run_media_import(
             # TODO(skowalak): duplicate filenames? issue warning here or handle
             logger.debug("Found %s files.", len(files))
             logger.debug("Updating file info in db")
-            update_all_files(files)
+            update_files_in_db(files, db)
 
-        if force_erase and not errors:
-            # TODO(skowalak): save files that have been successfully imported so we
-            # don't erase rooms that failed with errors.
-            # TODO(skowalak): Maybe populate a table with filenames and hashes?
-            logger.info("Erasing imported data")
-
+        if erase:
+            logger.info("Generating list of imported files.")
 
     else:
         logger.error("Database file does not exist: %s", db_path)

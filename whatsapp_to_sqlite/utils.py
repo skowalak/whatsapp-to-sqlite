@@ -106,7 +106,7 @@ def save_message(
         sender_id = system_message_id
 
     # TODO(skowalak): Into config
-    type_format = "com.github.com.skowalak.whatsapp-to-sqlite.{0}"
+    type_format = "com.github.skowalak.whatsapp-to-sqlite.{0}"
     msg_w_user_content = [RoomMessage]
     msg_w_target_user = [
         RoomJoinThirdPartyByThirdParty,
@@ -197,13 +197,15 @@ def save_sender(name: str, db: Database) -> uuid.UUID:
 def save_file(filename: str, db: Database) -> uuid.UUID:
     """Create every file (even with same name) as new file row. Dedup comes later."""
     file_id = uuid.uuid4()
-    file_mime_type, _ = mimetypes.guess_type(filename)
+    file_mime_type = None
+    if filename:
+        file_mime_type, _ = mimetypes.guess_type(filename)
 
     db["file"].insert(
         {
             "id": file_id.bytes,
             "sha512sum": None,
-            "filename": filename,
+            "name": filename,
             "mime_type": file_mime_type,
             "preview": None,
             "size": None,
@@ -244,7 +246,7 @@ def get_hash(file_path: Path) -> bytes:
 def update_all_files(data_dir_files: List[Path], db: Database):
     data_dir_filenames = {file.name: file for file in data_dir_files}
     for row in db["file"].rows:
-        filename = row["filename"]
+        filename = row["name"]
         if filename and filename in data_dir_filenames.keys():
             file_id = uuid.UUID(bytes=row["id"])
 

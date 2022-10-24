@@ -144,7 +144,7 @@ def run_import(
             {
                 "id": bytes,
                 "sha512sum": bytes,
-                "filename": str,
+                "name": str,
                 "mime_type": str,
                 "preview": str,
                 "size": int,
@@ -182,6 +182,7 @@ def run_import(
         db["message"].add_foreign_key("sender_id", "sender", "id")
         db["message"].add_foreign_key("room_id", "room", "id")
         db["message"].add_foreign_key("target_user", "sender", "id")
+        db["message"].add_foreign_key("file_id", "file", "id")
         # TODO(skowalak): eval init using separate init.sql? -> Better DB
     else:
         # db is already initialized, continue

@@ -144,7 +144,9 @@ def system_event():
         number_change1,
         number_change2,
         room_name_t,
+        room_name_t2,
         room_name_f,
+        room_name_f2,
         room_avatar_t,
         room_avatar_f,
         room_avatar_delete_t,
@@ -233,36 +235,90 @@ def number_change1():
 
 
 def number_change2():
-    return (
-        _(r".+?(?= hat)"),
+    return [
         (
-            " hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
-            "schreiben oder die neue Nummer hinzuzufügen.\n"
+            _(r".+?(?= hat)"),
+            (
+                " hat eine neue Telefonnummer. Tippe, um eine Nachricht zu "
+                "schreiben oder die neue Nummer hinzuzufügen.\n"
+            ),
         ),
-    )
+        (_(r".+?(?= hat)"), " hat ihre Nummer gewechselt.\n"),
+        (_(r".+?(?= hat)"), " hat seine Nummer gewechselt.\n"),
+    ]
 
 
 # Room Modification
 def room_name_t():
-    return (
-        _(r".+?(?= hat)"),
-        ' hat den Betreff von "',
-        _(r".+?(?= \")"),
-        '" zu "',
-        _(r".+?(?= \")"),
-        '" geändert.\n',
-    )
+    return [
+        (
+            _(r".+?(?= hat)"),
+            ' hat den Betreff von "',
+            _(r".+?(?=\")"),
+            '" zu "',
+            _(r".+?(?=\")"),
+            '" geändert.\n',
+        ),
+        (
+            _(r".+?(?= hat)"),
+            " hat den Betreff von „",
+            _(r".+?(?=\“)"),
+            "“ zu „",
+            _(r".+?(?=\“)"),
+            "“ geändert.\n",
+        ),
+    ]
+
+
+def room_name_t2():
+    return [
+        (
+            _(r".+?(?= hat)"),
+            ' hat den Betreff zu "',
+            _(r".+?(?=\")"),
+            '" geändert.\n',
+        ),
+        (
+            _(r".+?(?= hat)"),
+            " hat den Betreff zu „",
+            _(r".+?(?=\“)"),
+            "“ geändert.\n",
+        ),
+    ]
 
 
 def room_name_f():
-    # return "Du hast den Betreff von \"", name, "\" zu \"", name, "\" geändert.\n"
-    return (
-        'Du hast den Betreff von "',
-        _(r".+?(?= \")"),
-        '" zu "',
-        _(r".+?(?= \")"),
-        '" geändert.\n',
-    )
+    return [
+        (
+            'Du hast den Betreff von "',
+            _(r".+?(?=\")"),
+            '" zu "',
+            _(r".+?(?=\")"),
+            '" geändert.\n',
+        ),
+        (
+            "Du hast den Betreff von “",
+            _(r".+?(?=\“)"),
+            "“ zu “",
+            _(r".+?(?=\“)"),
+            "“ geändert.\n",
+        ),
+    ]
+
+
+def room_name_f2():
+    return [
+        (
+            'Du hast den Betreff zu "',
+            _(r".+?(?=\")"),
+            '" geändert.\n',
+        ),
+        (
+            "Du hast den Betreff zu “",
+            _(r".+?(?=\“)"),
+            "“ geändert.\n",
+        ),
+    ]
 
 
 def room_avatar_t():
@@ -374,9 +430,15 @@ class MessageVisitor(PTNodeVisitor):
         return RoomNumberChangeWithoutNumber(sender=children[0])
 
     def visit_room_name_t(self, node, children):
+        return RoomNameByThirdParty(sender=children[0], new_room_name=children[2])
+
+    def visit_room_name_t2(self, node, children):
         return RoomNameByThirdParty(sender=children[0], new_room_name=children[1])
 
     def visit_room_name_f(self, node, children):
+        return RoomNameBySelf(new_room_name=children[1])
+
+    def visit_room_name_f2(self, node, children):
         return RoomNameBySelf(new_room_name=children[0])
 
     def visit_room_avatar_t(self, node, children):

@@ -8,6 +8,7 @@ click = "*"
 arpeggio = "*"
 sqlite-utils = ">=2.7.2"
 marshmallow = "*"
+pillow = "*"
 
 [dev-packages]
 black = "*"

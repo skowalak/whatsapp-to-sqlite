@@ -143,7 +143,7 @@ def save_message(
     if message.__class__ in msg_w_user_content:
         message_text = message.text
         if message_text and message.continued_text:
-            message_text = message_text + "\n" + message.continued_text
+            message_text = message_text + message.continued_text
         elif not message_text and message.continued_text:
             message_text = message.continued_text
         if message.file:

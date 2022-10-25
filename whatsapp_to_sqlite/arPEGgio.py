@@ -332,6 +332,7 @@ def room_name_f2():
 
 # TODO(skowalak): These two don't have a visitor / model
 
+
 def room_description_f():
     return "Du hast die Gruppenbeschreibung geändert.\n"
 
@@ -462,7 +463,7 @@ class MessageVisitor(PTNodeVisitor):
 
     def visit_room_name_f2(self, node, children):
         return RoomNameBySelf(new_room_name=children[0])
-    
+
     def visit_room_description_t(self, node, children):
         return RoomDescriptionByThirdParty(sender=children[0])
 
@@ -506,7 +507,7 @@ class MessageVisitor(PTNodeVisitor):
     def visit_user_message(self, node, children):
         msgdict = {}
         for child in children[2:]:
-            if "continued_text" in child.items():
+            if "continued_text" in child.keys():
                 msgdict["continued_text"] = (
                     msgdict.get("continued_text", "") + child["continued_text"]
                 )

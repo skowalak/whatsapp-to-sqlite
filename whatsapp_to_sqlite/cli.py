@@ -10,7 +10,7 @@ import click
 import sqlite_utils
 
 from whatsapp_to_sqlite import utils
-from whatsapp_to_sqlite.arPEGgio import MessageException
+from whatsapp_to_sqlite.parser import MessageException
 
 
 @click.group()
@@ -184,7 +184,8 @@ def run_import(
                 logger.debug("Starting to parse file %s.", file)
                 room_name = utils.get_room_name(file)
                 logger.debug("Found room: %s.", room_name)
-                room = utils.parse_room_file(file, logger)
+                # FIXME(skowalak): locale flag
+                room = utils.parse_room_file(file, "de_de", logger)
                 bar_files.update(1, f'Saving "{room_name}" to database.')
             except MessageException as error:
                 logger.warning(

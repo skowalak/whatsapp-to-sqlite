@@ -122,8 +122,8 @@ class TestHelpers:
 
 class TestParser:
     @pytest.mark.parametrize("raw, expected", LOCALE_DE)
-    def test_message_types(self, raw, expected, logger):
-        messages = utils.parse_string(raw, logger)
+    def test_message_types_de_de(self, raw, expected, logger):
+        messages = utils.parse_string(raw, "de_de", logger)
 
         assert len(messages) == 1
 

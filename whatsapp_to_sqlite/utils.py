@@ -15,11 +15,12 @@ from PIL import Image
 from sqlite_utils import Database
 from sqlite_utils.db import NotFoundError
 
-from whatsapp_to_sqlite.arPEGgio import (
+from whatsapp_to_sqlite.parser import (
     MessageException,
     MessageParser,
     MessageVisitor,
     NoMatch,
+    get_parser_by_locale,
     log,
     visit_parse_tree,
 )
@@ -40,20 +41,22 @@ from whatsapp_to_sqlite.messages import (
 )
 
 
-def parse_string(string: str, logger) -> List[Message]:
+def parse_string(string: str, locale: str, logger) -> List[Message]:
     """Parse a single string using arpeggio grammar definition."""
     if not string.endswith("\n"):
         logger.debug("file not ending with EOL found, adding newline")
         string = string + "\n"
-    parse_tree = MessageParser(log).parse(string)
+    
+    localized_parser = get_parser_by_locale(locale)
+    parse_tree = localized_parser(log).parse(string)
     return MessageVisitor().visit(parse_tree)
 
 
-def parse_room_file(file_path: Path, logger) -> List[Message]:
+def parse_room_file(file_path: Path, locale: str, logger: Logger) -> List[Message]:
     with file_path.open("r", encoding="utf-8") as room_file:
         string = room_file.read()
         try:
-            return parse_string(string, logger)
+            return parse_string(string, locale, logger)
         except NoMatch as exception:
             raise MessageException(file_path) from exception
 

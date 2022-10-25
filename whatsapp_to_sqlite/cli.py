@@ -259,7 +259,7 @@ def run_media_import(
     If an output directory is specified, imported media will be renamed and
     copied there.
     """
-    loglevel = logging.INFO if not verbose else logging.DEBUG
+    loglevel = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(format="%(message)s", level=loglevel)
     logger = logging.getLogger(__name__)
 
@@ -268,20 +268,21 @@ def run_media_import(
         "options: output_dir: %s, erase: %s, verbose %s", output_dir, erase, verbose
     )
 
-    if db_path.exists():
-        logger.info("Database found at %s.", db_path)
-
-        if data_directory and data_directory.exists():
-            logger.debug("Data directory %s specified. Searching now.", data_directory)
-            files = utils.crawl_directory(data_directory)
-            # TODO(skowalak): duplicate filenames? issue warning here or handle
-            logger.debug("Found %s files.", len(files))
-            logger.debug("Updating file info in db")
-            update_files_in_db(files, db)
-
-        if erase:
-            logger.info("Generating list of imported files.")
-
-    else:
-        logger.error("Database file does not exist: %s", db_path)
+    if not db_path.exists():
+        # TODO(skowalak): init db II
+        logger.error("Database file does not exist: %s.", db_path)
         exit(-1)
+
+    logger.info("Database found at %s.", db_path)
+
+    if not (data_directory and data_directory.exists()):
+        logger.error("data_directory %s does not exist: %s.", data_directory)
+
+    logger.debug("Data directory %s specified. Searching now.", data_directory)
+    files = utils.crawl_directory(data_directory)
+    utils.import_media_to_db(files, db, logger)
+    # TODO(skowalak): Match media files
+    # utils.update_files_in_db(db, logger)
+
+    if erase:
+        logger.info("Generating list of imported files.")

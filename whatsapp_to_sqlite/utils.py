@@ -1,12 +1,16 @@
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+from logging import Logger
 
 import base64
 import hashlib
+import io
 import mimetypes
 import os
 import re
 import uuid
+
+from PIL import Image
 
 from sqlite_utils import Database
 from sqlite_utils.db import NotFoundError
@@ -250,7 +254,7 @@ def crawl_directory(path: Path, file_name_glob: str = "*") -> List[Path]:
     return file_list
 
 
-def get_hash(file_path: Path) -> bytes:
+def _get_hash(file_path: Path) -> bytes:
     hash_obj = hashlib.sha512()
     with filepath.open("rb") as file_obj:
         for chunk in iter(lambda: file_obj.read(2048), b""):
@@ -262,7 +266,7 @@ def insert_media_in_db(data_dir_files: List[Path], db: Database):
     for path in data_dir_files:
         file_id = uuid.uuid4()
         file_name = path.name
-        file_sha512sum = get_hash(file)
+        file_sha512sum = _get_hash(file)
         file_mime_type, _ = mimetypes.guess_type(filename)
         file_preview = None
         if file_mime_type in ["application/jpg", "application/png"]:
@@ -281,7 +285,7 @@ def insert_media_in_db(data_dir_files: List[Path], db: Database):
         )
 
 
-def update_files_in_db(data_dir_files: List[Path], db: Database):
+def update_files_in_db(data_dir_files: List[Path], db: Database, logger: Logger):
     data_dir_filenames = {file.name: file for file in data_dir_files}
     for row in db["file"].rows:
         filename = row["name"]
@@ -289,7 +293,7 @@ def update_files_in_db(data_dir_files: List[Path], db: Database):
             file_id = uuid.UUID(row["id"])
 
             file = data_dir_filenames[filename]
-            file_sha512sum = get_hash(file)
+            file_sha512sum = _get_hash(file)
             file_preview = None  # FIXME(skowalak): PIL/pillow?
             file_size = file.stat().st_size
 
@@ -301,6 +305,46 @@ def update_files_in_db(data_dir_files: List[Path], db: Database):
                     "size": file_size,
                 },
             )
+
+
+def import_media_to_db(files: List[Path], db: Database, logger: Logger):
+    logger.debug("Attempting to import %s media files to database", len(files))
+    for path in files:
+        file_id = uuid.uuid4()
+        file_sha512sum = _get_hash(file)
+        file_mime_type, _ = mimetypes.guess_type(filename)
+        file_preview = _generate_preview(file, file_mime_type, logger)
+        file_size = file.stat().st_size
+
+        db["file"].insert(
+            {
+                "id": str(file_id),
+                "sha512sum": file_sha512sum,
+                "mime_type": file_mime_type,
+                "preview": file_preview,
+                "size": file_size,
+            }
+        )
+
+
+def _generate_preview(file: Path, mime_type: str, logger: Logger) -> Optional[bytes]:
+    # identify image files:
+    try:
+        return _generate_image_preview(file)
+    except OSError as error:
+        logger.debug("error from PIL (not an image?): %s.", str(error))
+    except Exception as error:
+        logger.warning("uncaught error generating img preview: %s.", str(error))
+
+
+def _generate_image_preview(img: Path, preview_size=(20, 20)) -> Optional[bytes]:
+    with Image.open(img) as image:
+        image = Image.open(img)
+        image.thumbnail(preview_size)
+
+        with io.BytesIO() as buffer:
+            image.save(buffer, format="JPEG")
+            return buffer.getvalue()
 
 
 def debug_dump(msglist: list) -> None:

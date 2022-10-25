@@ -189,6 +189,10 @@ def save_message_relationship(
 
 
 def save_sender(name: str, db: Database) -> uuid.UUID:
+    # remove all U+200e if exist
+    # TODO(skowalak): If it ever happens: relevant for arabic locales?
+    if name:
+        name = name.lstrip("\u200e")
     # look up if sender name (assumed unique) already exists
     sender_id = None
     for pk, row in db["sender"].pks_and_rows_where("name = ?", [name]):
@@ -238,6 +242,9 @@ def get_system_message_id(db: Database) -> uuid.UUID:
 def crawl_directory(path: Path, file_name_glob: str = "*") -> List[Path]:
     file_list = []
     for glob_path in path.glob(f"**/{file_name_glob}"):
+        if glob_path.is_dir():
+            continue
+
         file_list.append(glob_path)
 
     return file_list
@@ -251,7 +258,30 @@ def get_hash(file_path: Path) -> bytes:
     return hash_obj.digest()
 
 
-def update_all_files(data_dir_files: List[Path], db: Database):
+def insert_media_in_db(data_dir_files: List[Path], db: Database):
+    for path in data_dir_files:
+        file_id = uuid.uuid4()
+        file_name = path.name
+        file_sha512sum = get_hash(file)
+        file_mime_type, _ = mimetypes.guess_type(filename)
+        file_preview = None
+        if file_mime_type in ["application/jpg", "application/png"]:
+            file_preview = ""
+        file_size = path.stat().st_size
+
+        db["file"].insert(
+            {
+                "id": file_id,
+                "name": file_name,
+                "sha512sum": file_sha512sum,
+                "mime_type": file_mime_type,
+                "preview": file_preview,
+                "size": file_size,
+            }
+        )
+
+
+def update_files_in_db(data_dir_files: List[Path], db: Database):
     data_dir_filenames = {file.name: file for file in data_dir_files}
     for row in db["file"].rows:
         filename = row["name"]
@@ -271,30 +301,6 @@ def update_all_files(data_dir_files: List[Path], db: Database):
                     "size": file_size,
                 },
             )
-
-
-def sanitize_user_message(message: Message) -> List[Message]:
-    # merge first and next lines if any
-    if message.text and message.continued_text:
-        message.text = message.text + message.continued_text
-        message.continued_text = None
-
-    # remove lrm marks that get inserted into some messages
-    message.sender.lstrip("\u200e")
-
-    # split messages containing files and text
-    if message.file and message.continued_text:
-        first_message = message.replace(continued_text=None)
-        second_message = message.replace(
-            file=False,
-            file_lost=False,
-            filename=None,
-            text=message.continued_text,
-            continued_text=None,
-        )
-        return [first_message, second_message]
-
-    return [message]
 
 
 def debug_dump(msglist: list) -> None:

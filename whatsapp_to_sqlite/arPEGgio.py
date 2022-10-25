@@ -381,7 +381,7 @@ class MessageVisitor(PTNodeVisitor):
         return visit_parse_tree(parse_tree, self)
 
     def visit_timestamp(self, node, children):
-        # prepend century (thank god whatsapp did not exist before 2000 a.D.
+        # prepend century (thank god whatsapp did not exist before y2k
         century = "20"
         year = int(century + children[2])
         month = int(children[1])
@@ -521,7 +521,7 @@ class MessageVisitor(PTNodeVisitor):
             text=msgdict.get("text"),
             continued_text=msgdict.get("continued_text"),
             filename=msgdict.get("filename"),
-            file_lost=msgdict.get("file_lost"),
+            file_lost=msgdict.get("file_lost", False),
             file=msgdict.get("file", False),
         )
         return msg

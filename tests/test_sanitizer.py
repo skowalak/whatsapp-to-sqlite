@@ -14,6 +14,7 @@ def test_timestamp():
 
 
 class TestSanitizeUserMessage:
+    @pytest.mark.skip
     def test_sanitize_multiline_message(self, test_timestamp: datetime.datetime):
 
         str1 = "testtext1\n"

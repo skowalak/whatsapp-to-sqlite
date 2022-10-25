@@ -17,6 +17,8 @@ from whatsapp_to_sqlite.messages import (
     RoomAvatarDeleteByThirdParty,
     RoomCreateBySelf,
     RoomCreateByThirdParty,
+    RoomDescriptionBySelf,
+    RoomDescriptionByThirdParty,
     RoomJoinSelfByThirdParty,
     RoomJoinThirdPartyBySelf,
     RoomJoinThirdPartyByThirdParty,
@@ -39,6 +41,11 @@ from whatsapp_to_sqlite.messages import (
 class MessageParser(ParserPython):
     def __init__(self, *args, skipws=False, memoization=True, **kwargs):
         super().__init__(*args, skipws=skipws, memoization=memoization, **kwargs)
+
+
+class MessageException(Exception):
+    def __init__(self, file_path):
+        self.file_path = file_path
 
 
 ###############################################################################
@@ -147,6 +154,8 @@ def system_event():
         room_name_t2,
         room_name_f,
         room_name_f2,
+        room_description_t,
+        room_description_f,
         room_avatar_t,
         room_avatar_f,
         room_avatar_delete_t,
@@ -254,17 +263,17 @@ def room_name_t():
         (
             _(r".+?(?= hat)"),
             ' hat den Betreff von "',
-            _(r".+?(?=\")"),
+            _(r".+?(?=\" zu)"),
             '" zu "',
-            _(r".+?(?=\")"),
+            _(r".+?(?=\" geändert)"),
             '" geändert.\n',
         ),
         (
             _(r".+?(?= hat)"),
             " hat den Betreff von „",
-            _(r".+?(?=\“)"),
+            _(r".+?(?=\“ zu)"),
             "“ zu „",
-            _(r".+?(?=\“)"),
+            _(r".+?(?=\“ geändert)"),
             "“ geändert.\n",
         ),
     ]
@@ -275,13 +284,13 @@ def room_name_t2():
         (
             _(r".+?(?= hat)"),
             ' hat den Betreff zu "',
-            _(r".+?(?=\")"),
+            _(r".+?(?=\" geändert)"),
             '" geändert.\n',
         ),
         (
             _(r".+?(?= hat)"),
             " hat den Betreff zu „",
-            _(r".+?(?=\“)"),
+            _(r".+?(?=\“ geändert)"),
             "“ geändert.\n",
         ),
     ]
@@ -291,16 +300,16 @@ def room_name_f():
     return [
         (
             'Du hast den Betreff von "',
-            _(r".+?(?=\")"),
+            _(r".+?(?=\" zu)"),
             '" zu "',
-            _(r".+?(?=\")"),
+            _(r".+?(?=\" geändert)"),
             '" geändert.\n',
         ),
         (
             "Du hast den Betreff von “",
-            _(r".+?(?=\“)"),
+            _(r".+?(?=\“ zu)"),
             "“ zu “",
-            _(r".+?(?=\“)"),
+            _(r".+?(?=\“ geändert)"),
             "“ geändert.\n",
         ),
     ]
@@ -310,15 +319,28 @@ def room_name_f2():
     return [
         (
             'Du hast den Betreff zu "',
-            _(r".+?(?=\")"),
+            _(r".+?(?=\" geändert)"),
             '" geändert.\n',
         ),
         (
             "Du hast den Betreff zu “",
-            _(r".+?(?=\“)"),
+            _(r".+?(?=\“ geändert)"),
             "“ geändert.\n",
         ),
     ]
+
+
+# TODO(skowalak): These two don't have a visitor / model
+
+def room_description_f():
+    return "Du hast die Gruppenbeschreibung geändert.\n"
+
+
+def room_description_t():
+    return (
+        _(r".+?(?= hat)"),
+        " hat die Gruppenbeschreibung geändert.\n",
+    )
 
 
 def room_avatar_t():
@@ -440,6 +462,12 @@ class MessageVisitor(PTNodeVisitor):
 
     def visit_room_name_f2(self, node, children):
         return RoomNameBySelf(new_room_name=children[0])
+    
+    def visit_room_description_t(self, node, children):
+        return RoomDescriptionByThirdParty(sender=children[0])
+
+    def visit_room_description_f(self, node, children):
+        return RoomDescriptionBySelf()
 
     def visit_room_avatar_t(self, node, children):
         sender = children[0].lstrip("\u200e")
@@ -478,7 +506,12 @@ class MessageVisitor(PTNodeVisitor):
     def visit_user_message(self, node, children):
         msgdict = {}
         for child in children[2:]:
-            msgdict.update(child)
+            if "continued_text" in child.items():
+                msgdict["continued_text"] = (
+                    msgdict.get("continued_text", "") + child["continued_text"]
+                )
+            else:
+                msgdict.update(child)
 
         msg = RoomMessage(
             timestamp=children[0],

@@ -109,6 +109,16 @@ class RoomNameByThirdParty(SystemMessage):
 
 
 @dataclass
+class RoomDescriptionBySelf(SystemMessage):
+    pass
+
+
+@dataclass
+class RoomDescriptionByThirdParty(SystemMessage):
+    pass
+
+
+@dataclass
 class RoomAvatarChangeBySelf(SystemMessage):
     pass
 

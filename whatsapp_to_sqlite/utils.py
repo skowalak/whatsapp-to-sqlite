@@ -12,10 +12,12 @@ from sqlite_utils import Database
 from sqlite_utils.db import NotFoundError
 
 from whatsapp_to_sqlite.arPEGgio import (
+    MessageException,
     MessageParser,
     MessageVisitor,
-    visit_parse_tree,
+    NoMatch,
     log,
+    visit_parse_tree,
 )
 from whatsapp_to_sqlite.messages import (
     Message,
@@ -34,16 +36,22 @@ from whatsapp_to_sqlite.messages import (
 )
 
 
-def parse_string(string: str) -> List[Message]:
+def parse_string(string: str, logger) -> List[Message]:
     """Parse a single string using arpeggio grammar definition."""
+    if not string.endswith("\n"):
+        logger.debug("file not ending with EOL found, adding newline")
+        string = string + "\n"
     parse_tree = MessageParser(log).parse(string)
     return MessageVisitor().visit(parse_tree)
 
 
-def parse_room_file(file_path: str) -> List[Message]:
+def parse_room_file(file_path: Path, logger) -> List[Message]:
     with file_path.open("r", encoding="utf-8") as room_file:
         string = room_file.read()
-        return parse_string(string)
+        try:
+            return parse_string(string, logger)
+        except NoMatch as exception:
+            raise MessageException(file_path) from exception
 
 
 def get_room_name(absolute_file_path: str) -> str:
@@ -162,7 +170,7 @@ def save_message(
             "type": type_format.format(message.__class__.__name__),
             "message_content": message_text,
             "file": message_file,
-            "file_id": str(file_id)if file_id else None,
+            "file_id": str(file_id) if file_id else None,
             "target_user": str(message_target_user) if message_target_user else None,
             "new_room_name": message_new_room_name,
             "new_number": message_new_number,

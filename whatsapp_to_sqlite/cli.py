@@ -70,7 +70,9 @@ def run_import(
     if db_path.exists():
         logger.warning("Database file at %s already exists! Creating backup.", db_path)
         try:
-            shutil.copy2(str(db_path), f"{db_path}.{time.time()}.bkp")
+            shutil.copy2(
+                db_path, db_path.with_suffix(f".{time.time()}.bkp{db_path.suffix}")
+            )
         except OSError as error:
             logger.error("Cannot write backup database file: %s", str(error))
             raise click.ClickException(

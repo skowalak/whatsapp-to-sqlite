@@ -8,6 +8,7 @@ import io
 import mimetypes
 import os
 import re
+import time
 import uuid
 
 from PIL import Image
@@ -41,12 +42,105 @@ from whatsapp_to_sqlite.messages import (
 )
 
 
+def make_db_backup(db_path: Path, logger: Logger) -> None:
+    try:
+        shutil.copy2(
+            db_path, db_path.with_suffix(f".{time.time()}.bkp{db_path.suffix}")
+        )
+    except OSError as error:
+        logger.error("Cannot write backup database file: %s", str(error))
+        raise click.ClickException(
+            "Database file already exists, cannot write backup file."
+        )
+
+
+def init_db(db: Database, logger: Logger) -> None:
+    if db.schema == "":
+        logger.debug("db is uninitialized, create tables")
+        db["message"].create(
+            {
+                "id": str,
+                "timestamp": datetime.datetime,
+                "full_content": str,
+                "sender_id": str,
+                "room_id": str,
+                "depth": int,
+                "type": str,  # discriminator
+                "message_content": str,
+                "file": bool,
+                "file_id": str,
+                "target_user": str,
+                "new_room_name": str,
+                "new_number": str,
+            },
+            pk="id",
+            if_not_exists=True,
+        )
+        db["message_x_message"].create(
+            {"message_id": str, "parent_message_id": str},
+            pk=("message_id", "parent_message_id"),
+            foreign_keys=[
+                ("message_id", "message", "id"),
+                ("parent_message_id", "message", "id"),
+            ],
+            if_not_exists=True,
+        )
+        db["file"].create(
+            {
+                "id": str,
+                "sha512sum": str,
+                "name": str,
+                "mime_type": str,
+                "preview": str,
+                "size": int,
+            },
+            pk="id",
+            if_not_exists=True,
+        )
+        db["room"].create(
+            {
+                "id": str,
+                "is_dm": bool,
+                "first_message": str,
+                "display_img": str,
+                "name": str,
+                "member_count": int,
+            },
+            pk="id",
+            foreign_keys=[
+                ("first_message", "message", "id"),
+                ("display_img", "file", "id"),
+            ],
+            if_not_exists=True,
+        )
+        db["sender"].create(
+            {
+                "id": str,
+                "name": str,
+            },
+            pk="id",
+            if_not_exists=True,
+        )
+        db["system_message_id"].create({"id": int, "system_message_id": str})
+
+        # add foreign keys for circular references
+        db["message"].add_foreign_key("sender_id", "sender", "id")
+        db["message"].add_foreign_key("room_id", "room", "id")
+        db["message"].add_foreign_key("target_user", "sender", "id")
+        db["message"].add_foreign_key("file_id", "file", "id")
+        # TODO(skowalak): eval init using separate init.sql? -> Better DB
+    else:
+        # logger.error("Incorrect schema version: %s", db.schema)
+        # raise click.ClickException("Incorrect database schema version.")
+        logger.debug("database already initialized: %s", db.schema)
+
+
 def parse_string(string: str, locale: str, logger) -> List[Message]:
     """Parse a single string using arpeggio grammar definition."""
     if not string.endswith("\n"):
         logger.debug("file not ending with EOL found, adding newline")
         string = string + "\n"
-    
+
     localized_parser = get_parser_by_locale(locale)
     parse_tree = localized_parser(log).parse(string)
     return MessageVisitor().visit(parse_tree)
@@ -259,33 +353,10 @@ def crawl_directory(path: Path, file_name_glob: str = "*") -> List[Path]:
 
 def _get_hash(file_path: Path) -> bytes:
     hash_obj = hashlib.sha512()
-    with filepath.open("rb") as file_obj:
+    with file_path.open("rb") as file_obj:
         for chunk in iter(lambda: file_obj.read(2048), b""):
             hash_obj.update(chunk)
     return hash_obj.digest()
-
-
-def insert_media_in_db(data_dir_files: List[Path], db: Database):
-    for path in data_dir_files:
-        file_id = uuid.uuid4()
-        file_name = path.name
-        file_sha512sum = _get_hash(file)
-        file_mime_type, _ = mimetypes.guess_type(filename)
-        file_preview = None
-        if file_mime_type in ["application/jpg", "application/png"]:
-            file_preview = ""
-        file_size = path.stat().st_size
-
-        db["file"].insert(
-            {
-                "id": file_id,
-                "name": file_name,
-                "sha512sum": file_sha512sum,
-                "mime_type": file_mime_type,
-                "preview": file_preview,
-                "size": file_size,
-            }
-        )
 
 
 def update_files_in_db(data_dir_files: List[Path], db: Database, logger: Logger):
@@ -310,23 +381,30 @@ def update_files_in_db(data_dir_files: List[Path], db: Database, logger: Logger)
             )
 
 
+def match_media_files(db: Database, logger: Logger):
+    logger.debug("Attempting to match imported media to imported chats")
+
+
 def import_media_to_db(files: List[Path], db: Database, logger: Logger):
     logger.debug("Attempting to import %s media files to database", len(files))
     for path in files:
         file_id = uuid.uuid4()
-        file_sha512sum = _get_hash(file)
-        file_mime_type, _ = mimetypes.guess_type(filename)
-        file_preview = _generate_preview(file, file_mime_type, logger)
-        file_size = file.stat().st_size
+        file_name = path.name
+        file_sha512sum = _get_hash(path)
+        file_mime_type, _ = mimetypes.guess_type(file_name)
+        file_preview = _generate_preview(path, file_mime_type, logger)
+        file_size = path.stat().st_size
 
         db["file"].insert(
             {
                 "id": str(file_id),
                 "sha512sum": file_sha512sum,
+                "name": file_name,
                 "mime_type": file_mime_type,
                 "preview": file_preview,
                 "size": file_size,
-            }
+            },
+            pk="id",
         )
 
 

@@ -330,9 +330,6 @@ def room_name_f2():
     ]
 
 
-# TODO(skowalak): These two don't have a visitor / model
-
-
 def room_description_f():
     return "Du hast die Gruppenbeschreibung geändert.\n"
 

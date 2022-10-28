@@ -102,7 +102,7 @@ def run_import(
             room = None
             try:
                 logger.debug("Starting to parse file %s.", file)
-                room_name = utils.get_room_name(file)
+                room_name = utils.get_room_name(file, locale)
                 logger.debug("Found room: %s.", room_name)
                 room = utils.parse_room_file(file, locale, logger)
                 bar_files.update(1, f'Saving "{room_name}" to database.')
@@ -192,7 +192,6 @@ def run_media_import(
     )
 
     if not db_path.exists():
-        # TODO(skowalak): init db II
         logger.error("Database file does not exist: %s.", db_path)
         exit(-1)
 

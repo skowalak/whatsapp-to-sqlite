@@ -155,10 +155,9 @@ def parse_room_file(file_path: Path, locale: str, logger: Logger) -> List[Messag
             raise MessageException(file_path) from exception
 
 
-def get_room_name(absolute_file_path: str) -> str:
+def get_room_name(absolute_file_path: str, locale) -> str:
     file_path = Path(absolute_file_path)
-    # TODO(skowalak): internationalization of file names
-    room_name = re.search(r"WhatsApp Chat mit (.*)", file_path.stem).group(1)
+    room_name = parser.get_room_name_by_locale(file_path.stem, locale)
     return room_name
 
 

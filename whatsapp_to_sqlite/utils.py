@@ -340,7 +340,8 @@ def get_system_message_id(db: Database) -> uuid.UUID:
     return uuid.UUID(system_message_id_bytes["system_message_id"])
 
 
-def crawl_directory(path: Path, file_name_glob: str = "*") -> List[Path]:
+def crawl_directory(path: Path, locale: str) -> List[Path]:
+    file_name_glob = parser.get_chat_file_glob_by_locale(locale)
     file_list = []
     for glob_path in path.glob(f"**/{file_name_glob}"):
         if glob_path.is_dir():

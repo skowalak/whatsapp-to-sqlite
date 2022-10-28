@@ -46,6 +46,14 @@ def cli():
     required=False,
 )
 @click.option(
+    "-l",
+    "--locale",
+    default="de_de",
+    type=str,
+    help=("Locale for which the files will be parsed."),
+    required=False,
+)
+@click.option(
     "-v",
     "--verbose",
     is_flag=True,
@@ -54,6 +62,7 @@ def cli():
 def run_import(
     chat_files: Path,
     db_path: Path,
+    locale: str,
     verbose=False,
 ):
     """
@@ -66,6 +75,7 @@ def run_import(
     loglevel = logging.INFO if not verbose else logging.DEBUG
     logging.basicConfig(format="%(message)s", level=loglevel)
     logger = logging.getLogger(__name__)
+
     logger.debug("chats path: %s, db path: %s, data dir: %s", chat_files, db_path)
     if db_path.exists():
         logger.warning("Database file at %s already exists! Creating backup.", db_path)
@@ -76,12 +86,8 @@ def run_import(
 
     errors = False
     system_message_id = utils.get_system_message_id(db)
-    # TODO(skowalak): For which locale are we crawling? What form do log
-    # filenames have there? -> CLI flag with default value.
     if chat_files.is_dir():
-        files = utils.crawl_directory(
-            chat_files, file_name_glob="WhatsApp Chat mit *.txt"
-        )
+        files = utils.crawl_directory(chat_files, locale)
     else:
         files = [chat_files]
 
@@ -98,8 +104,7 @@ def run_import(
                 logger.debug("Starting to parse file %s.", file)
                 room_name = utils.get_room_name(file)
                 logger.debug("Found room: %s.", room_name)
-                # FIXME(skowalak): locale flag
-                room = utils.parse_room_file(file, "de_de", logger)
+                room = utils.parse_room_file(file, locale, logger)
                 bar_files.update(1, f'Saving "{room_name}" to database.')
             except MessageException as error:
                 logger.warning(

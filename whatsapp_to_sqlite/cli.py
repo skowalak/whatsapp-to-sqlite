@@ -69,96 +69,10 @@ def run_import(
     logger.debug("chats path: %s, db path: %s, data dir: %s", chat_files, db_path)
     if db_path.exists():
         logger.warning("Database file at %s already exists! Creating backup.", db_path)
-        try:
-            shutil.copy2(
-                db_path, db_path.with_suffix(f".{time.time()}.bkp{db_path.suffix}")
-            )
-        except OSError as error:
-            logger.error("Cannot write backup database file: %s", str(error))
-            raise click.ClickException(
-                "Database file already exists, cannot write backup file."
-            )
-    db = sqlite_utils.Database(db_path)
-    if db.schema == "":
-        # db is uninitialized, create tables
-        # message table with discriminator on type
-        db["message"].create(
-            {
-                "id": str,
-                "timestamp": datetime.datetime,
-                "full_content": str,
-                "sender_id": str,
-                "room_id": str,
-                "depth": int,
-                "type": str,  # discriminator
-                "message_content": str,
-                "file": bool,
-                "file_id": str,
-                "target_user": str,
-                "new_room_name": str,
-                "new_number": str,
-            },
-            pk="id",
-            if_not_exists=True,
-        )
-        db["message_x_message"].create(
-            {"message_id": str, "parent_message_id": str},
-            pk=("message_id", "parent_message_id"),
-            foreign_keys=[
-                ("message_id", "message", "id"),
-                ("parent_message_id", "message", "id"),
-            ],
-            if_not_exists=True,
-        )
-        db["file"].create(
-            {
-                "id": str,
-                "sha512sum": str,
-                "name": str,
-                "mime_type": str,
-                "preview": str,
-                "size": int,
-            },
-            pk="id",
-            if_not_exists=True,
-        )
-        db["room"].create(
-            {
-                "id": str,
-                "is_dm": bool,
-                "first_message": str,
-                "display_img": str,
-                "name": str,
-                "member_count": int,
-            },
-            pk="id",
-            foreign_keys=[
-                ("first_message", "message", "id"),
-                ("display_img", "file", "id"),
-            ],
-            if_not_exists=True,
-        )
-        db["sender"].create(
-            {
-                "id": str,
-                "name": str,
-            },
-            pk="id",
-            if_not_exists=True,
-        )
-        db["system_message_id"].create({"id": int, "system_message_id": str})
+        utils.make_db_backup(db_path, logger)
 
-        # add foreign keys for circular references
-        db["message"].add_foreign_key("sender_id", "sender", "id")
-        db["message"].add_foreign_key("room_id", "room", "id")
-        db["message"].add_foreign_key("target_user", "sender", "id")
-        db["message"].add_foreign_key("file_id", "file", "id")
-        # TODO(skowalak): eval init using separate init.sql? -> Better DB
-    else:
-        # db is already initialized, continue
-        # logger.error("Incorrect schema version: %s", db.schema)
-        # raise click.ClickException("Incorrect database schema version.")
-        logger.debug("database already initialized: %s", db.schema)
+    db = sqlite_utils.Database(db_path)
+    utils.init_db(db, logger)
 
     errors = False
     system_message_id = utils.get_system_message_id(db)
@@ -266,7 +180,10 @@ def run_media_import(
 
     logger.debug("db path: %s, data dir: %s", db_path, data_directory)
     logger.debug(
-        "options: output_dir: %s, erase: %s, verbose %s", output_dir, erase, verbose
+        "options: output_dir: %s, erase: %s, verbose %s",
+        output_directory,
+        erase,
+        verbose,
     )
 
     if not db_path.exists():
@@ -275,6 +192,8 @@ def run_media_import(
         exit(-1)
 
     logger.info("Database found at %s.", db_path)
+    utils.make_db_backup(db_path, logger)
+    db = sqlite_utils.Database(db_path)
 
     if not (data_directory and data_directory.exists()):
         logger.error("data_directory %s does not exist: %s.", data_directory)

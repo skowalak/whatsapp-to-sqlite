@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from pathlib import Path
 
@@ -116,7 +117,7 @@ def run_import(
                 # TODO(skowalak): Message duplicate check via cli flag?
                 utils.save_room(room, room_name, system_message_id, db)
                 # utils.debug_dump(room)
-                bar_files.update(1)  # , f"Saving \"{room_name}\" to database.")
+                bar_files.update(1)
             except Exception as error:  # pylint: disable=broad-except
                 # FIXME(skowalak): Remove this clause completely
                 logger.error("Uncaught error while saving: %s", str(error))
@@ -190,7 +191,7 @@ def run_media_import(
 
     if not db_path.exists():
         logger.error("Database file does not exist: %s.", db_path)
-        exit(-1)
+        sys.exit(-1)
 
     logger.info("Database found at %s.", db_path)
     utils.make_db_backup(db_path, logger)
@@ -202,9 +203,7 @@ def run_media_import(
     logger.debug("Data directory %s specified. Searching now.", data_directory)
     files = utils.crawl_directory(data_directory)
     utils.import_media_to_db(files, db, logger)
-    # TODO(skowalak): Match media files
-    # utils.update_files_in_db(db, logger)
-    # utils.match_media_files(db, logger)
+    utils.match_media_files(db, logger)
 
     if erase:
         logger.info("Generating list of imported files.")

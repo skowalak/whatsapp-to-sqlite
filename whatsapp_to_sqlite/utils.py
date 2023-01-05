@@ -85,16 +85,27 @@ def init_db(db: Database, logger: Logger) -> None:
             ],
             if_not_exists=True,
         )
-        db["file"].create(
+        db["file_fs"].create(
             {
                 "id": str,
-                "sha512sum": str,
                 "name": str,
+                "sha512sum": str,
                 "mime_type": str,
                 "preview": str,
                 "size": int,
+                "original_file_path": str,
             },
             pk="id",
+        )
+        db["file_chat"].create(
+            {
+                "id": str,
+                "name": str,
+                "preview": str,
+                "file_fs_id": str,
+            },
+            pk="id",
+            foreign_keys=[("file_fs_id", "file_fs", "id")],
             if_not_exists=True,
         )
         db["room"].create(
@@ -315,18 +326,11 @@ def save_sender(name: str, db: Database) -> uuid.UUID:
 def save_file(filename: str, db: Database) -> uuid.UUID:
     """Create every file (even with same name) as new file row. Dedup comes later."""
     file_id = uuid.uuid4()
-    file_mime_type = None
-    if filename:
-        file_mime_type, _ = mimetypes.guess_type(filename)
-
-    db["file"].insert(
+    db["file_chat"].insert(
         {
             "id": str(file_id),
-            "sha512sum": None,
             "name": filename,
-            "mime_type": file_mime_type,
             "preview": None,
-            "size": None,
         }
     )
     return file_id
@@ -369,66 +373,50 @@ def _get_hash(file_path: Path) -> bytes:
     return hash_obj.digest()
 
 
-def update_files_in_db(data_dir_files: List[Path], db: Database, logger: Logger):
-    data_dir_filenames = {file.name: file for file in data_dir_files}
-    for row in db["file"].rows:
-        filename = row["name"]
-        if filename and filename in data_dir_filenames.keys():
-            file_id = uuid.UUID(row["id"])
-
-            file = data_dir_filenames[filename]
-            file_sha512sum = _get_hash(file)
-            file_preview = None  # FIXME(skowalak): PIL/pillow?
-            file_size = file.stat().st_size
-
-            db["file"].update(
-                str(file_id),
-                {
-                    "sha512sum": file_sha512sum,
-                    "preview": file_preview,
-                    "size": file_size,
-                },
-            )
-
-
 def match_media_files(db: Database, logger: Logger):
     """match media files imported from file system to file names from chats."""
     logger.debug("Attempting to match imported media to imported chats")
 
-    # iterate over files that have been referenced by messages
-    for row in db.query("select * from file"):
+    # iterate over files that occur in chat messages
+    for row in db["file_chat"].rows:
         file_id = row["id"]
         file_name = row["name"]
-        for row in db.query(
-            "select * from file_fs f where f.name = ? and f.sha512sum is not null",
-            [
-                file_name,
-            ],
-        ):
-            # these are candidates for being the file we look for
-            print(row)
+        if db["file_fs"].count_where("name = ?", file_name) > 1:
+            logger.info("more than one match for this %s, skipping.", file_name)
+            continue
+
+        for file_fs in db["file_fs"].rows_where("name = ?", file_name):
+            # this should only yield one row, see check above
+            file_fs_id = file_fs["id"]
+            file_fs_preview = file_fs["preview"]
+            db["file_chat"].update(
+                file_id, {"file_fs_id": file_fs_id, "preview": file_fs_preview}
+            )
+            db["file_fs"].update(file_fs_id, {"preview": None})
+            break
 
 
 def import_media_to_db(files: List[Path], db: Database, logger: Logger):
     """import media from file system into a db table `file_fs`."""
     logger.debug("Attempting to import %s media files to database", len(files))
-    # TODO(skowalak): maybe save different information on files that actually exist? like full path to find them again?
     for path in files:
         file_id = uuid.uuid4()
         file_name = path.name
         file_sha512sum = _get_hash(path)
         file_mime_type, _ = mimetypes.guess_type(file_name)
+        # FIXME(skowalak): file_preview requires PIL, make that optional
         file_preview = _generate_preview(path, file_mime_type, logger)
         file_size = path.stat().st_size
 
         db["file_fs"].insert(
             {
                 "id": str(file_id),
-                "sha512sum": file_sha512sum,
                 "name": file_name,
+                "sha512sum": file_sha512sum,
                 "mime_type": file_mime_type,
                 "preview": file_preview,
                 "size": file_size,
+                "original_file_path": str(path),
             },
             pk="id",
         )
@@ -439,7 +427,7 @@ def _generate_preview(file: Path, mime_type: str, logger: Logger) -> Optional[by
     logger.debug("generate preview for %s: %s.", mime_type, file.name)
     if mime_type in ("application/pdf", "pdf"):
         # TODO(skowalak): invoke pdf preview generator method here
-        pass
+        return
 
     try:
         return _generate_image_preview(file)

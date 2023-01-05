@@ -2,15 +2,15 @@ from pathlib import Path
 from typing import List, Optional
 from logging import Logger
 
-import base64
+import datetime
 import hashlib
 import io
 import mimetypes
-import os
-import re
 import time
+import shutil
 import uuid
 
+import click
 from PIL import Image
 
 from sqlite_utils import Database
@@ -18,12 +18,12 @@ from sqlite_utils.db import NotFoundError
 
 from whatsapp_to_sqlite.parser import (
     MessageException,
-    MessageParser,
     MessageVisitor,
     NoMatch,
+    get_chat_file_glob_by_locale,
     get_parser_by_locale,
+    get_room_name_by_locale,
     log,
-    visit_parse_tree,
 )
 from whatsapp_to_sqlite.messages import (
     Message,
@@ -157,7 +157,7 @@ def parse_room_file(file_path: Path, locale: str, logger: Logger) -> List[Messag
 
 def get_room_name(absolute_file_path: str, locale) -> str:
     file_path = Path(absolute_file_path)
-    room_name = parser.get_room_name_by_locale(file_path.stem, locale)
+    room_name = get_room_name_by_locale(file_path.stem, locale)
     return room_name
 
 
@@ -172,10 +172,16 @@ def save_room(
     room_id = uuid.uuid4()
 
     # check if first message in room matches a group or a DM
-    # TODO(skowalak): do it
-    room_is_dm = False
+    room_is_dm = True
+    if isinstance(
+        room[0],
+        (
+            RoomCreateBySelf,
+            RoomCreateByThirdParty,
+        ),
+    ):
+        room_is_dm = False
 
-    message_ids = []
     first_message_id = None
     last_message_id = None
     for depth, message in enumerate(room, start=1):
@@ -295,7 +301,7 @@ def save_sender(name: str, db: Database) -> uuid.UUID:
         name = name.lstrip("\u200e")
     # look up if sender name (assumed unique) already exists
     sender_id = None
-    for pk, row in db["sender"].pks_and_rows_where("name = ?", [name]):
+    for pk, _ in db["sender"].pks_and_rows_where("name = ?", [name]):
         # if exists use id
         sender_id = uuid.UUID(pk)
         return sender_id
@@ -339,16 +345,20 @@ def get_system_message_id(db: Database) -> uuid.UUID:
     return uuid.UUID(system_message_id_bytes["system_message_id"])
 
 
-def crawl_directory(path: Path, locale: str) -> List[Path]:
-    file_name_glob = parser.get_chat_file_glob_by_locale(locale)
-    file_list = []
-    for glob_path in path.glob(f"**/{file_name_glob}"):
+def crawl_directory(path: Path, glob: str = "**/*") -> List[Path]:
+    path_list = []
+    for glob_path in path.glob(glob):
         if glob_path.is_dir():
             continue
 
-        file_list.append(glob_path)
+        path_list.append(glob_path)
 
-    return file_list
+    return path_list
+
+
+def crawl_directory_for_chat_files(path: Path, locale: str) -> List[Path]:
+    file_name_glob = get_chat_file_glob_by_locale(locale)
+    return crawl_directory(path, f"**/{file_name_glob}")
 
 
 def _get_hash(file_path: Path) -> bytes:
@@ -382,11 +392,27 @@ def update_files_in_db(data_dir_files: List[Path], db: Database, logger: Logger)
 
 
 def match_media_files(db: Database, logger: Logger):
+    """match media files imported from file system to file names from chats."""
     logger.debug("Attempting to match imported media to imported chats")
+
+    # iterate over files that have been referenced by messages
+    for row in db.query("select * from file"):
+        file_id = row["id"]
+        file_name = row["name"]
+        for row in db.query(
+            "select * from file_fs f where f.name = ? and f.sha512sum is not null",
+            [
+                file_name,
+            ],
+        ):
+            # these are candidates for being the file we look for
+            print(row)
 
 
 def import_media_to_db(files: List[Path], db: Database, logger: Logger):
+    """import media from file system into a db table `file_fs`."""
     logger.debug("Attempting to import %s media files to database", len(files))
+    # TODO(skowalak): maybe save different information on files that actually exist? like full path to find them again?
     for path in files:
         file_id = uuid.uuid4()
         file_name = path.name
@@ -395,7 +421,7 @@ def import_media_to_db(files: List[Path], db: Database, logger: Logger):
         file_preview = _generate_preview(path, file_mime_type, logger)
         file_size = path.stat().st_size
 
-        db["file"].insert(
+        db["file_fs"].insert(
             {
                 "id": str(file_id),
                 "sha512sum": file_sha512sum,
@@ -409,12 +435,17 @@ def import_media_to_db(files: List[Path], db: Database, logger: Logger):
 
 
 def _generate_preview(file: Path, mime_type: str, logger: Logger) -> Optional[bytes]:
-    # identify image files:
+    """generate a small preview image for media files."""
+    logger.debug("generate preview for %s: %s.", mime_type, file.name)
+    if mime_type in ("application/pdf", "pdf"):
+        # TODO(skowalak): invoke pdf preview generator method here
+        pass
+
     try:
         return _generate_image_preview(file)
     except OSError as error:
         logger.debug("error from PIL (not an image?): %s.", str(error))
-    except Exception as error:
+    except Exception as error:  # pylint: disable=broad-except
         logger.warning("uncaught error generating img preview: %s.", str(error))
 
 
@@ -428,15 +459,16 @@ def _generate_image_preview(img: Path, preview_size=(20, 20)) -> Optional[bytes]
             return buffer.getvalue()
 
 
-def debug_dump(msglist: list) -> None:
-    import json
-    from datetime import datetime
-
-    def json_serial(obj):
-        if isinstance(obj, Message):
-            return obj.toDict()
-
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-
-    print(json.dumps(msglist, indent=2, default=json_serial, sort_keys=True))
+# def debug_dump(msglist: list) -> None:
+#     import json
+#     from datetime import datetime
+#
+#     def json_serial(obj):
+#         if isinstance(obj, Message):
+#             return obj.toDict()
+#
+#         if isinstance(obj, datetime):
+#             return obj.isoformat()
+#
+#     print(json.dumps(msglist, indent=2, default=json_serial, sort_keys=True))
+#

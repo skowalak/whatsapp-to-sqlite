@@ -1,8 +1,4 @@
-import datetime
 import logging
-import os
-import shutil
-import time
 
 from pathlib import Path
 
@@ -76,7 +72,7 @@ def run_import(
     logging.basicConfig(format="%(message)s", level=loglevel)
     logger = logging.getLogger(__name__)
 
-    logger.debug("chats path: %s, db path: %s, data dir: %s", chat_files, db_path)
+    logger.debug("chats path: %s, db path: %s", chat_files, db_path)
     if db_path.exists():
         logger.warning("Database file at %s already exists! Creating backup.", db_path)
         utils.make_db_backup(db_path, logger)
@@ -87,11 +83,11 @@ def run_import(
     errors = False
     system_message_id = utils.get_system_message_id(db)
     if chat_files.is_dir():
-        files = utils.crawl_directory(chat_files, locale)
+        files = utils.crawl_directory_for_chat_files(chat_files, locale)
     else:
         files = [chat_files]
 
-    system_message_id = db["system_message_id"].get(1)
+    system_message_id = db["system_message_id"].get(1)  # pylint: disable=no-member
     logger.info("Parsing %s chat files.", len(files))
     with click.progressbar(
         length=len(files) * 2,
@@ -113,14 +109,15 @@ def run_import(
                     str(error.__cause__),
                 )
                 errors = True
-            except Exception as error:
+            except Exception as error:  # pylint: disable=broad-except
                 logger.warning("Uncaught exception during parsing: %s", str(error))
                 errors = True
             try:
+                # TODO(skowalak): Message duplicate check via cli flag?
                 utils.save_room(room, room_name, system_message_id, db)
                 # utils.debug_dump(room)
                 bar_files.update(1)  # , f"Saving \"{room_name}\" to database.")
-            except Exception as error:
+            except Exception as error:  # pylint: disable=broad-except
                 # FIXME(skowalak): Remove this clause completely
                 logger.error("Uncaught error while saving: %s", str(error))
                 errors = True
@@ -200,13 +197,14 @@ def run_media_import(
     db = sqlite_utils.Database(db_path)
 
     if not (data_directory and data_directory.exists()):
-        logger.error("data_directory %s does not exist: %s.", data_directory)
+        logger.error("data_directory %s does not exist.", data_directory)
 
     logger.debug("Data directory %s specified. Searching now.", data_directory)
     files = utils.crawl_directory(data_directory)
     utils.import_media_to_db(files, db, logger)
     # TODO(skowalak): Match media files
     # utils.update_files_in_db(db, logger)
+    # utils.match_media_files(db, logger)
 
     if erase:
         logger.info("Generating list of imported files.")

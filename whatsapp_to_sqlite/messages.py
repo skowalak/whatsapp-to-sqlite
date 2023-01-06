@@ -38,23 +38,35 @@ class SystemMessage(Message):
     new_room_name: str = None
 
 
-@dataclass
-class RoomCreateByThirdParty(SystemMessage):
+class HasTargetUserMessage:
+    pass
+
+
+class HasNewRoomNameMessage:
+    pass
+
+
+class HasNewNumberMessage:
     pass
 
 
 @dataclass
-class RoomCreateBySelf(SystemMessage):
+class RoomCreateByThirdParty(SystemMessage, HasNewRoomNameMessage):
     pass
 
 
 @dataclass
-class RoomJoinThirdPartyByThirdParty(SystemMessage):
+class RoomCreateBySelf(SystemMessage, HasNewRoomNameMessage):
     pass
 
 
 @dataclass
-class RoomJoinThirdPartyByUnknown(SystemMessage):
+class RoomJoinThirdPartyByThirdParty(SystemMessage, HasTargetUserMessage):
+    pass
+
+
+@dataclass
+class RoomJoinThirdPartyByUnknown(SystemMessage, HasTargetUserMessage):
     pass
 
 
@@ -64,17 +76,17 @@ class RoomJoinSelfByThirdParty(SystemMessage):
 
 
 @dataclass
-class RoomJoinThirdPartyBySelf(SystemMessage):
+class RoomJoinThirdPartyBySelf(SystemMessage, HasTargetUserMessage):
     pass
 
 
 @dataclass
-class RoomKickThirdPartyByThirdParty(SystemMessage):
+class RoomKickThirdPartyByThirdParty(SystemMessage, HasTargetUserMessage):
     pass
 
 
 @dataclass
-class RoomKickThirdPartyByUnknown(SystemMessage):
+class RoomKickThirdPartyByUnknown(SystemMessage, HasTargetUserMessage):
     pass
 
 
@@ -84,7 +96,7 @@ class RoomKickSelfByThirdParty(SystemMessage):
 
 
 @dataclass
-class RoomKickThirdPartyBySelf(SystemMessage):
+class RoomKickThirdPartyBySelf(SystemMessage, HasTargetUserMessage):
     pass
 
 
@@ -99,12 +111,12 @@ class RoomLeaveSelf(SystemMessage):
 
 
 @dataclass
-class RoomNameBySelf(SystemMessage):
+class RoomNameBySelf(SystemMessage, HasNewRoomNameMessage):
     pass
 
 
 @dataclass
-class RoomNameByThirdParty(SystemMessage):
+class RoomNameByThirdParty(SystemMessage, HasNewRoomNameMessage):
     pass
 
 
@@ -144,7 +156,7 @@ class RoomAdminPromotion(SystemMessage):
 
 
 @dataclass
-class RoomNumberChangeWithNumber(SystemMessage):
+class RoomNumberChangeWithNumber(SystemMessage, HasNewNumberMessage):
     pass
 
 

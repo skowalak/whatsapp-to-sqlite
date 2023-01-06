@@ -93,30 +93,25 @@ def run_import(
     else:
         files = [chat_files]
 
-    system_message_id = db["system_message_id"].get(1)  # pylint: disable=no-member
-    logger.info("Parsing %s chat files.", len(files))
     with rich.progress.Progress(
-        rich.progress.SpinnerColumn(),
+        rich.progress.SpinnerColumn(spinner_name="dots10"),
         *rich.progress.Progress.get_default_columns(),
         rich.progress.TimeElapsedColumn(),
         rich.progress.TextColumn("{task.fields[room]}"),
     ) as progress:
-        all_files = progress.add_task("Processing...", total=len(files), room="")
-        current_file_save = progress.add_task("Saving...", room="")
+        padding = " " * 19
+        all_files = progress.add_task("Import progress", total=len(files), room="")
+        current_file_save = progress.add_task(padding, room="")
+
+        print(f"Parsing {len(files):n} chat files.")
         for file in files:
             room = None
             try:
                 room_name = utils.get_room_name(file, locale_opt)
                 progress.update(all_files, room=room_name)
-                progress.update(
-                    current_file_save,
-                    completed=0.0,
-                    total=3,
-                    description="Parsing...",
-                    room="",
-                )
+                progress.reset(current_file_save, total=3, description="Parsing")
                 room = utils.parse_room_file(file, locale_opt, logger)
-                progress.update(current_file_save, advance=1, room="")
+                progress.advance(current_file_save)
 
             except MessageException as error:
                 logger.warning(
@@ -130,12 +125,10 @@ def run_import(
                 errors = True
             try:
                 # TODO(skowalak): Message duplicate check via cli flag?
-                # progress.update(
-                #     current_file_save,
-                #     total=len(room),
-                #     completed=0.0,
-                #     description="Inserting...",
-                # )
+                progress.update(
+                    current_file_save,
+                    description="Processing",
+                )
                 utils.save_room(
                     room,
                     room_name,
@@ -145,7 +138,7 @@ def run_import(
                         current_file_save,
                         advance=1,
                         room="",
-                        description="Inserting...",
+                        description="Inserting",
                     ),
                 )
 
@@ -184,10 +177,13 @@ def run_import(
     required=False,
 )
 @click.option(
-    "-e",
-    "--erase",
-    is_flag=True,
-    help="Generate list of erasable filenames after exporting them to target directory.",
+    "-l",
+    "--list",
+    "list_path",
+    default="whatsapp_to_sqlite_deleteable",
+    type=click.Path(file_okay=True, dir_okay=False, resolve_path=True, path_type=Path),
+    help="Write paths of copied files to this file.",
+    required=False,
 )
 @click.option(
     "-v",
@@ -198,8 +194,8 @@ def run_import(
 def run_media_import(
     data_directory: Path,
     db_path: Path,
-    output_directory,
-    erase=False,
+    output_directory: Path,
+    list_path: Path,
     verbose=False,
 ):
     """
@@ -217,9 +213,9 @@ def run_media_import(
 
     logger.debug("db path: %s, data dir: %s", db_path, data_directory)
     logger.debug(
-        "options: output_dir: %s, erase: %s, verbose %s",
+        "options: output_dir: %s, list_path: %s, verbose %s",
         output_directory,
-        erase,
+        list_path,
         verbose,
     )
 
@@ -260,12 +256,12 @@ def run_media_import(
 
         progress.start_task(import_step)
         progress.update(import_step, description="Importing")
-        # utils.import_media_to_db(
-        #     files,
-        #     db,
-        #     logger,
-        #     progress_callback=lambda: progress.advance(import_step),
-        # )
+        utils.import_media_to_db(
+            files,
+            db,
+            logger,
+            progress_callback=lambda: progress.advance(import_step),
+        )
         progress.advance(import_step, advance=len(files))
         progress.advance(all_steps)
 
@@ -290,7 +286,7 @@ def run_media_import(
 
         progress.start_task(move_step)
         progress.update(move_step, description="Copying Files")
-        utils.move_files(
+        deleteable_files = utils.move_files(
             db,
             output_directory,
             logger,
@@ -299,5 +295,5 @@ def run_media_import(
         )
         progress.advance(all_steps)
 
-        if erase:
-            logger.info("Generating list of imported files.")
+        utils.write_list_of_files(deleteable_files, list_path)
+        print(f"Copied {len(deleteable_files)}. List written to {list_path}.")

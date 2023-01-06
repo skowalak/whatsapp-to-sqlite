@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple
 from logging import Logger
 
 import datetime
 import hashlib
 import io
+import itertools
 import mimetypes
 import time
 import shutil
@@ -27,6 +28,9 @@ from whatsapp_to_sqlite.parser import (
 )
 from whatsapp_to_sqlite.messages import (
     Message,
+    HasNewNumberMessage,
+    HasNewRoomNameMessage,
+    HasTargetUserMessage,
     RoomCreateBySelf,
     RoomCreateByThirdParty,
     RoomJoinThirdPartyBySelf,
@@ -40,6 +44,10 @@ from whatsapp_to_sqlite.messages import (
     RoomNameByThirdParty,
     RoomNumberChangeWithNumber,
 )
+
+
+config_type_format: str = "com.github.skowalak.whatsapp-to-sqlite.{0}"
+config_url_format: str = "http://whatsapp-media.local/{0}"
 
 
 def make_db_backup(db_path: Path, logger: Logger) -> None:
@@ -61,7 +69,6 @@ def init_db(db: Database, logger: Logger) -> None:
             {
                 "id": str,
                 "timestamp": datetime.datetime,
-                "full_content": str,
                 "sender_id": str,
                 "room_id": str,
                 "depth": int,
@@ -120,7 +127,7 @@ def init_db(db: Database, logger: Logger) -> None:
             pk="id",
             foreign_keys=[
                 ("first_message", "message", "id"),
-                ("display_img", "file", "id"),
+                ("display_img", "file_fs", "id"),
             ],
             if_not_exists=True,
         )
@@ -138,7 +145,7 @@ def init_db(db: Database, logger: Logger) -> None:
         db["message"].add_foreign_key("sender_id", "sender", "id")
         db["message"].add_foreign_key("room_id", "room", "id")
         db["message"].add_foreign_key("target_user", "sender", "id")
-        db["message"].add_foreign_key("file_id", "file", "id")
+        db["message"].add_foreign_key("file_id", "file_chat", "id")
         # TODO(skowalak): eval init using separate init.sql? -> Better DB
     else:
         # logger.error("Incorrect schema version: %s", db.schema)
@@ -173,7 +180,11 @@ def get_room_name(absolute_file_path: str, locale) -> str:
 
 
 def save_room(
-    room: List[Message], room_name: str, system_message_id: uuid.UUID, db: Database
+    room: List[Message],
+    room_name: str,
+    system_message_id: uuid.UUID,
+    db: Database,
+    progress_callback=lambda *_: None,
 ):
     """Insert a room (list of messages in one room context) into the database."""
     if not room:
@@ -193,18 +204,28 @@ def save_room(
     ):
         room_is_dm = False
 
-    first_message_id = None
-    last_message_id = None
-    for depth, message in enumerate(room, start=1):
-        message_id = save_message(message, room_id, depth, system_message_id, db)
+    sender_lookup_table = get_sender_lookup_table(db)
 
-        if not first_message_id:
-            first_message_id = message_id
+    messages, files = prepare_messages(
+        room,
+        room_id,
+        system_message_id,
+        sender_lookup_table,
+    )
+    first_message_id = messages[0]["id"]
+    message_ids = [message["id"] for message in messages]
+    message_relationships = [
+        {"message_id": str(y), "parent_message_id": str(x)}
+        for x, y in itertools.pairwise(message_ids)
+    ]
+    senders = list(sender_lookup_table.values())
 
-        if last_message_id:
-            save_message_relationship(message_id, last_message_id, db)
+    progress_callback()
 
-        last_message_id = message_id
+    db["file_chat"].insert_all(files)
+    db["sender"].insert_all(senders, ignore=True)
+    db["message"].insert_all(messages)
+    db["message_x_message"].insert_all(message_relationships)
 
     db["room"].insert(
         {
@@ -217,123 +238,124 @@ def save_room(
         }
     )
 
+    progress_callback()
 
-def save_message(
-    message: Message,
+
+def prepare_messages(
+    messages: List[Message],
     room_id: uuid.UUID,
-    depth: int,
     system_message_id: uuid.UUID,
-    db: Database,
+    sender_lookup_table: Dict,
+    progress_callback=lambda *_: None,
+) -> Tuple[List[Dict], List[Dict]]:
+    prepared_messages = []
+    prepared_files = []
+    for depth, message in enumerate(messages, start=1):
+        sender_id = get_sender(message, system_message_id, sender_lookup_table)
+
+        message_id = uuid.uuid4()
+        file_id = None
+        message_file = False
+        message_text = None
+        message_target_user = None
+        message_new_room_name = None
+        message_new_number = None
+
+        if message.__class__ in (RoomMessage,):
+            message_text = message.text
+            if message_text and message.continued_text:
+                message_text = message_text + message.continued_text
+            elif not message_text and message.continued_text:
+                message_text = message.continued_text
+
+            msg_file = get_file(message)
+            if msg_file:
+                message_file = True
+                prepared_files.append(msg_file)
+
+        if isinstance(message, HasTargetUserMessage):
+            message_target_users
+            message_target_user = get_participant(message.target, sender_lookup_table)
+
+        if isinstance(message, HasNewRoomNameMessage):
+            message_new_room_name = message.new_room_name
+
+        if isinstance(message, HasNewNumberMessage):
+            message_new_number = message.new_number
+
+        prepared_messages.append(
+            {
+                "id": str(message_id),
+                "timestamp": message.timestamp,
+                "sender_id": str(sender_id),
+                "room_id": str(room_id),
+                "depth": depth,
+                "type": config_type_format.format(message.__class__.__name__),
+                "message_content": message_text,
+                "file": message_file,
+                "file_id": str(file_id) if file_id else None,
+                "target_user": str(message_target_user)
+                if message_target_user
+                else None,
+                "new_room_name": message_new_room_name,
+                "new_number": message_new_number,
+            }
+        )
+        progress_callback()
+
+    return prepared_messages, prepared_files
+
+
+def get_sender(
+    message: Message, system_message_id: uuid.UUID, look_up_table: Dict
 ) -> uuid.UUID:
+    """get the sender record of a message, if it has one"""
     if hasattr(message, "sender"):
-        sender_id = save_sender(message.sender, db)
-    else:
-        sender_id = system_message_id
+        try:
+            return get_participant(message.sender, look_up_table)
+        except ValueError:
+            # probably a "BySelf" message
+            return system_message_id
 
-    # TODO(skowalak): Into config
-    type_format = "com.github.skowalak.whatsapp-to-sqlite.{0}"
-    msg_w_user_content = [RoomMessage]
-    msg_w_target_user = [
-        RoomJoinThirdPartyByThirdParty,
-        RoomJoinThirdPartyByUnknown,
-        RoomJoinThirdPartyBySelf,
-        RoomKickThirdPartyByThirdParty,
-        RoomKickThirdPartyByUnknown,
-        RoomKickThirdPartyBySelf,
-    ]
-    msg_w_new_room_name = [
-        RoomCreateByThirdParty,
-        RoomCreateBySelf,
-        RoomNameBySelf,
-        RoomNameByThirdParty,
-    ]
-    msg_w_new_number = [RoomNumberChangeWithNumber]
-
-    message_id = uuid.uuid4()
-    file_id = None
-    message_file = False
-    message_text = None
-    message_target_user = None
-    message_new_room_name = None
-    message_new_number = None
-
-    if message.__class__ in msg_w_user_content:
-        message_text = message.text
-        if message_text and message.continued_text:
-            message_text = message_text + message.continued_text
-        elif not message_text and message.continued_text:
-            message_text = message.continued_text
-        if message.file:
-            message_file = True
-            file_id = save_file(message.filename, db)
-
-    if message.__class__ in msg_w_target_user:
-        message_target_user = save_sender(message.target, db)
-
-    if message.__class__ in msg_w_new_room_name:
-        message_new_room_name = message.new_room_name
-
-    if message.__class__ in msg_w_new_number:
-        message_new_number = message.new_number
-
-    db["message"].insert(
-        {
-            "id": str(message_id),
-            "timestamp": message.timestamp,
-            "full_content": message.full_text,
-            "sender_id": str(sender_id),
-            "room_id": str(room_id),
-            "depth": depth,
-            "type": type_format.format(message.__class__.__name__),
-            "message_content": message_text,
-            "file": message_file,
-            "file_id": str(file_id) if file_id else None,
-            "target_user": str(message_target_user) if message_target_user else None,
-            "new_room_name": message_new_room_name,
-            "new_number": message_new_number,
-        }
-    )
-
-    return message_id
+    return system_message_id
 
 
-def save_message_relationship(
-    message_id: uuid.UUID, parent_message_id: uuid.UUID, db: Database
-):
-    db["message_x_message"].insert(
-        {"message_id": str(message_id), "parent_message_id": str(parent_message_id)}
-    )
+def get_participant(name: str, look_up_table: Dict) -> uuid.UUID:
+    """use the lookuptable to check if an id for this name already exists"""
+    if not name:
+        raise ValueError("invalid name")
 
-
-def save_sender(name: str, db: Database) -> uuid.UUID:
-    # remove all U+200e if exist
     # TODO(skowalak): If it ever happens: relevant for arabic locales?
-    if name:
-        name = name.lstrip("\u200e")
-    # look up if sender name (assumed unique) already exists
-    sender_id = None
-    for pk, _ in db["sender"].pks_and_rows_where("name = ?", [name]):
-        # if exists use id
-        sender_id = uuid.UUID(pk)
-        return sender_id
+    name = name.lstrip("\u200e")
 
-    # if not exists create new and use that id
-    sender_id = uuid.uuid4()
-    db["sender"].insert({"id": (sender_id), "name": name})
+    sender_id = look_up_table.get(name, {}).get("id")
+    if not sender_id:
+        sender_id = uuid.uuid4()
+        look_up_table[name] = {"id": sender_id, "name": name}
+
     return sender_id
 
 
-def save_file(filename: str, db: Database) -> uuid.UUID:
-    """Create every file (even with same name) as new file row. Dedup comes later."""
-    file_id = uuid.uuid4()
-    db["file_chat"].insert(
-        {
-            "id": str(file_id),
-            "name": filename,
-            "preview": None,
-        }
-    )
-    return file_id
+def get_file(message: Message) -> Optional[Dict]:
+    """get a file from a message, if one exists."""
+    if message.file:
+        if not message.filename and not message.file_lost:
+            raise ValueError("message indicates file, but no filename")
+        return {"id": uuid.uuid4(), "name": message.filename}
+
+
+def get_sender_lookup_table(db: Database) -> Dict[uuid.UUID, Dict]:
+    """
+    get a dictionary of sender records with the names as lookup key.
+
+    this will not respect non-unique names.
+    """
+    lut = {}
+    for row in db["sender"].rows:
+        name = row["name"]
+        lut[name] = row
+
+    return lut
 
 
 def get_system_message_id(db: Database) -> uuid.UUID:
@@ -373,19 +395,26 @@ def _get_hash(file_path: Path) -> bytes:
     return hash_obj.digest()
 
 
-def match_media_files(db: Database, logger: Logger):
+def match_media_files(
+    db: Database,
+    logger: Logger,
+    set_progress_size=lambda *_, **__: None,
+    progress_callback=lambda *_: None,
+):
     """match media files imported from file system to file names from chats."""
     logger.debug("Attempting to match imported media to imported chats")
 
     # iterate over files that occur in chat messages
+    progress_size = db["file_chat"].count
+    set_progress_size(progress_size)
     for row in db["file_chat"].rows:
         file_id = row["id"]
         file_name = row["name"]
-        if db["file_fs"].count_where("name = ?", file_name) > 1:
-            logger.info("more than one match for this %s, skipping.", file_name)
+        if db["file_fs"].count_where("name = ?", [file_name]) > 1:
+            logger.debug("more than one match for file name '%s', skipping.", file_name)
             continue
 
-        for file_fs in db["file_fs"].rows_where("name = ?", file_name):
+        for file_fs in db["file_fs"].rows_where("name = ?", [file_name]):
             # this should only yield one row, see check above
             file_fs_id = file_fs["id"]
             file_fs_preview = file_fs["preview"]
@@ -395,31 +424,84 @@ def match_media_files(db: Database, logger: Logger):
             db["file_fs"].update(file_fs_id, {"preview": None})
             break
 
+        progress_callback()
 
-def import_media_to_db(files: List[Path], db: Database, logger: Logger):
+
+def import_media_to_db(
+    files: List[Path],
+    db: Database,
+    logger: Logger,
+    progress_callback=lambda *_: None,
+):
     """import media from file system into a db table `file_fs`."""
     logger.debug("Attempting to import %s media files to database", len(files))
-    for path in files:
-        file_id = uuid.uuid4()
-        file_name = path.name
-        file_sha512sum = _get_hash(path)
-        file_mime_type, _ = mimetypes.guess_type(file_name)
-        # FIXME(skowalak): file_preview requires PIL, make that optional
-        file_preview = _generate_preview(path, file_mime_type, logger)
-        file_size = path.stat().st_size
 
-        db["file_fs"].insert(
-            {
-                "id": str(file_id),
-                "name": file_name,
-                "sha512sum": file_sha512sum,
-                "mime_type": file_mime_type,
-                "preview": file_preview,
-                "size": file_size,
-                "original_file_path": str(path),
-            },
-            pk="id",
+    # inserting appears to be kinda slow, so we are chunking our inserts to 1000 files at a time
+    def chunker(iterable, n, fillvalue=None):
+        args = [iter(iterable)]
+        return itertools.zip_longest(*args, fillvalue=fillvalue)
+
+    for chunk in chunker(files, 1000):
+        files_in_chunk = []
+        for path in chunk:
+            # handle fillvalue
+            if path is None:
+                break
+
+            file_id = uuid.uuid4()
+            file_name = path.name
+            file_sha512sum = _get_hash(path)
+            file_mime_type, _ = mimetypes.guess_type(file_name)
+            # FIXME(skowalak): file_preview requires PIL, make that optional
+            file_preview = _generate_preview(path, file_mime_type, logger)
+            file_size = path.stat().st_size
+
+            files_in_chunk.append(
+                {
+                    "id": str(file_id),
+                    "name": file_name,
+                    "sha512sum": file_sha512sum,
+                    "mime_type": file_mime_type,
+                    "preview": file_preview,
+                    "size": file_size,
+                    "original_file_path": str(path),
+                }
+            )
+            progress_callback()
+
+        db["file_fs"].insert_all(files_in_chunk)
+
+
+def remove_media_duplicates(db) -> int:
+    cursor = db.execute(
+        (
+            "DELETE FROM file_fs "
+            "WHERE rowid > ("
+            "SELECT MIN(rowid) FROM file_fs f2 "
+            "WHERE file_fs.name = f2.name "
+            "AND file_fs.sha512sum = f2.sha512sum "
+            "AND file_fs.size = f2.size"
+            ");"
         )
+    )
+    return cursor.rowcount
+
+
+def move_files(
+    db: Database,
+    output_directory: Path,
+    logger: Logger,
+    set_progress_size=lambda *_, **__: None,
+    progress_callback=lambda *_: None,
+) -> None:
+    copyable_files_count = db["file_fs"].count
+    set_progress_size(copyable_files_count)
+    # for row in db["file_fs"].rows:
+    for i in range(copyable_files_count):
+        import time
+
+        time.sleep(0.1)
+        progress_callback()
 
 
 def _generate_preview(file: Path, mime_type: str, logger: Logger) -> Optional[bytes]:

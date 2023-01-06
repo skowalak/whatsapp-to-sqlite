@@ -265,13 +265,11 @@ def run_media_import(
         progress.advance(import_step, advance=len(files))
         progress.advance(all_steps)
 
-        # check imported file recoreds for duplicates (same name, same hash, same size)
         progress.start_task(dedup_step)
         progress.update(dedup_step, description="Removing Duplicates")
         removed_files = utils.remove_media_duplicates(db)
         print(f"Removed {removed_files:n} duplicate files.")
         progress.update(dedup_step, completed=1.0)
-        len_files_after_dedup = len_files - removed_files
         progress.advance(all_steps)
 
         progress.start_task(match_step)

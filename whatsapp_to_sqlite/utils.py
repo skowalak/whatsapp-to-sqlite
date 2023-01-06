@@ -33,16 +33,7 @@ from whatsapp_to_sqlite.messages import (
     HasTargetUserMessage,
     RoomCreateBySelf,
     RoomCreateByThirdParty,
-    RoomJoinThirdPartyBySelf,
-    RoomJoinThirdPartyByThirdParty,
-    RoomJoinThirdPartyByUnknown,
-    RoomKickThirdPartyBySelf,
-    RoomKickThirdPartyByThirdParty,
-    RoomKickThirdPartyByUnknown,
     RoomMessage,
-    RoomNameBySelf,
-    RoomNameByThirdParty,
-    RoomNumberChangeWithNumber,
 )
 
 
@@ -421,7 +412,7 @@ def match_media_files(
     progress_size = db["file_chat"].count
     set_progress_size(progress_size)
 
-    file_fs_imported = set()
+    file_fs_imported = []
     file_objects = []
     file_copyable = []
     for row in db["file_chat"].rows:
@@ -439,6 +430,9 @@ def match_media_files(
             file_fs_path = file_fs["original_file_path"]
             file_fs_mimetype = file_fs["mime_type"]
             file_fs_size = file_fs["size"]
+            file_url = (
+                config_url_format.format(file_fs_sum) + f"?mimetype={file_fs_mimetype}"
+            )
             db["file_chat"].update(
                 file_id,
                 {
@@ -448,7 +442,7 @@ def match_media_files(
             file_objects.append(
                 {
                     "sha512sum": file_fs_sum,
-                    "url": config_url_format.format(file_fs_sum),
+                    "url": file_url,
                     "preview": file_fs_preview,
                     "mime_type": file_fs_mimetype,
                     "size": file_fs_size,
@@ -465,9 +459,10 @@ def match_media_files(
 
         progress_callback()
 
-    db["file_object"].insert_all(file_objects, pk="sha512sum")
+    db["file_object"].insert_all(file_objects, ignore=True)
     db["file_copyable"].insert_all(file_copyable)
-    db["file_fs"].delete_where("id = ?", file_fs_imported)
+    # if file_fs_imported:
+    #    db["file_fs"].delete_where("id = ?", file_fs_imported)
 
 
 def import_media_to_db(
@@ -481,7 +476,7 @@ def import_media_to_db(
 
     # inserting appears to be kinda slow, so we are chunking our inserts to 1000 files at a time
     def chunker(iterable, n, fillvalue=None):
-        args = [iter(iterable)]
+        args = [iter(iterable)] * n
         return itertools.zip_longest(*args, fillvalue=fillvalue)
 
     for chunk in chunker(files, 1000):
@@ -503,7 +498,7 @@ def import_media_to_db(
                 {
                     "id": str(file_id),
                     "name": file_name,
-                    "sha512sum": file_sha512sum,
+                    "sha512sum": file_sha512sum.hex(),
                     "mime_type": file_mime_type,
                     "preview": file_preview,
                     "size": file_size,
@@ -538,7 +533,7 @@ def move_files(
     progress_callback=lambda *_: None,
 ) -> List[Path]:
     # delete duplicate copyable files
-    cursor = db.execute(
+    _ = db.execute(
         (
             "delete from file_copyable "
             "where rowid > ("
@@ -555,7 +550,7 @@ def move_files(
         source = Path(row["original_file_path"])
         target_file_name = row["target_file_path"]
         target = output_directory / target_file_name[:2] / target_file_name
-        target.mkdir(parents=True, exist_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
         try:
             shutil.copy(source, target)
         except Exception as exception:
@@ -566,6 +561,16 @@ def move_files(
         progress_callback()
 
     return deleteable_files
+
+
+def write_list_of_files(files: List[Path], outfile: Path):
+    if outfile.exists():
+        shutil.copy2(
+            outfile, outfile.with_suffix(f".{time.time()}.bkp{outfile.suffix}")
+        )
+
+    with open(outfile, "w", encoding="utf-8") as outfile_obj:
+        outfile_obj.writelines([str(f) for f in files])
 
 
 def _generate_preview(file: Path, mime_type: str, logger: Logger) -> Optional[bytes]:

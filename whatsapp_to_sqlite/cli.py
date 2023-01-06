@@ -1,9 +1,13 @@
+# pylint: disable=logging-fstring-interpolation
 import logging
+import locale
 import sys
 
 from pathlib import Path
 
 import click
+import rich
+import rich.progress
 import sqlite_utils
 
 from whatsapp_to_sqlite import utils
@@ -45,6 +49,7 @@ def cli():
 @click.option(
     "-l",
     "--locale",
+    "locale_opt",
     default="de_de",
     type=str,
     help=("Locale for which the files will be parsed."),
@@ -59,7 +64,7 @@ def cli():
 def run_import(
     chat_files: Path,
     db_path: Path,
-    locale: str,
+    locale_opt: str,
     verbose=False,
 ):
     """
@@ -84,25 +89,35 @@ def run_import(
     errors = False
     system_message_id = utils.get_system_message_id(db)
     if chat_files.is_dir():
-        files = utils.crawl_directory_for_chat_files(chat_files, locale)
+        files = utils.crawl_directory_for_chat_files(chat_files, locale_opt)
     else:
         files = [chat_files]
 
     system_message_id = db["system_message_id"].get(1)  # pylint: disable=no-member
     logger.info("Parsing %s chat files.", len(files))
-    with click.progressbar(
-        length=len(files) * 2,
-        label="",
-        item_show_func=lambda x: x,
-    ) as bar_files:
+    with rich.progress.Progress(
+        rich.progress.SpinnerColumn(),
+        *rich.progress.Progress.get_default_columns(),
+        rich.progress.TimeElapsedColumn(),
+        rich.progress.TextColumn("{task.fields[room]}"),
+    ) as progress:
+        all_files = progress.add_task("Processing...", total=len(files), room="")
+        current_file_save = progress.add_task("Saving...", room="")
         for file in files:
             room = None
             try:
-                logger.debug("Starting to parse file %s.", file)
-                room_name = utils.get_room_name(file, locale)
-                logger.debug("Found room: %s.", room_name)
-                room = utils.parse_room_file(file, locale, logger)
-                bar_files.update(1, f'Saving "{room_name}" to database.')
+                room_name = utils.get_room_name(file, locale_opt)
+                progress.update(all_files, room=room_name)
+                progress.update(
+                    current_file_save,
+                    completed=0.0,
+                    total=3,
+                    description="Parsing...",
+                    room="",
+                )
+                room = utils.parse_room_file(file, locale_opt, logger)
+                progress.update(current_file_save, advance=1, room="")
+
             except MessageException as error:
                 logger.warning(
                     "Parsing exception:\n  In file %s:\n  %s.",
@@ -115,13 +130,30 @@ def run_import(
                 errors = True
             try:
                 # TODO(skowalak): Message duplicate check via cli flag?
-                utils.save_room(room, room_name, system_message_id, db)
-                # utils.debug_dump(room)
-                bar_files.update(1)
+                # progress.update(
+                #     current_file_save,
+                #     total=len(room),
+                #     completed=0.0,
+                #     description="Inserting...",
+                # )
+                utils.save_room(
+                    room,
+                    room_name,
+                    system_message_id,
+                    db,
+                    progress_callback=lambda: progress.update(
+                        current_file_save,
+                        advance=1,
+                        room="",
+                        description="Inserting...",
+                    ),
+                )
+
             except Exception as error:  # pylint: disable=broad-except
                 # FIXME(skowalak): Remove this clause completely
                 logger.error("Uncaught error while saving: %s", str(error))
                 errors = True
+            progress.update(all_files, advance=1, room="")
 
     if errors:
         logger.warning(
@@ -181,6 +213,8 @@ def run_media_import(
     logging.basicConfig(format="%(message)s", level=loglevel)
     logger = logging.getLogger(__name__)
 
+    locale.setlocale(locale.LC_ALL, "")
+
     logger.debug("db path: %s, data dir: %s", db_path, data_directory)
     logger.debug(
         "options: output_dir: %s, erase: %s, verbose %s",
@@ -199,11 +233,71 @@ def run_media_import(
 
     if not (data_directory and data_directory.exists()):
         logger.error("data_directory %s does not exist.", data_directory)
+        sys.exit(-1)
 
     logger.debug("Data directory %s specified. Searching now.", data_directory)
     files = utils.crawl_directory(data_directory)
-    utils.import_media_to_db(files, db, logger)
-    utils.match_media_files(db, logger)
+    len_files = len(files)
+    logger.info(f"Importing {len_files:n} files into database.")
 
-    if erase:
-        logger.info("Generating list of imported files.")
+    with rich.progress.Progress(
+        rich.progress.SpinnerColumn(spinner_name="dots10"),
+        rich.progress.TextColumn(
+            "[progress.description]{task.description}", justify="right"
+        ),
+        rich.progress.BarColumn(),
+        rich.progress.TaskProgressColumn(),
+        rich.progress.TimeRemainingColumn(),
+        rich.progress.TimeElapsedColumn(),
+    ) as progress:
+
+        padding = " " * 19
+        all_steps = progress.add_task("All Tasks", total=4)
+        import_step = progress.add_task(padding, total=len(files), start=False)
+        dedup_step = progress.add_task(padding, total=1, start=False)
+        match_step = progress.add_task(padding, total=len(files), start=False)
+        move_step = progress.add_task(padding, total=len(files), start=False)
+
+        progress.start_task(import_step)
+        progress.update(import_step, description="Importing")
+        # utils.import_media_to_db(
+        #     files,
+        #     db,
+        #     logger,
+        #     progress_callback=lambda: progress.advance(import_step),
+        # )
+        progress.advance(import_step, advance=len(files))
+        progress.advance(all_steps)
+
+        # check imported file recoreds for duplicates (same name, same hash, same size)
+        progress.start_task(dedup_step)
+        progress.update(dedup_step, description="Removing Duplicates")
+        removed_files = utils.remove_media_duplicates(db)
+        print(f"Removed {removed_files:n} duplicate files.")
+        progress.update(dedup_step, completed=1.0)
+        len_files_after_dedup = len_files - removed_files
+        progress.advance(all_steps)
+
+        progress.start_task(match_step)
+        progress.update(match_step, description="Matching")
+        utils.match_media_files(
+            db,
+            logger,
+            set_progress_size=lambda size: progress.update(match_step, total=size),
+            progress_callback=lambda: progress.advance(match_step),
+        )
+        progress.advance(all_steps)
+
+        progress.start_task(move_step)
+        progress.update(move_step, description="Copying Files")
+        utils.move_files(
+            db,
+            output_directory,
+            logger,
+            set_progress_size=lambda size: progress.update(move_step, total=size),
+            progress_callback=lambda: progress.advance(move_step),
+        )
+        progress.advance(all_steps)
+
+        if erase:
+            logger.info("Generating list of imported files.")

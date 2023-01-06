@@ -274,7 +274,7 @@ def prepare_messages(
                 prepared_files.append(msg_file)
 
         if isinstance(message, HasTargetUserMessage):
-            message_target_users
+            # FIXME(skowalak): This does not handle multiple target users -> data model change
             message_target_user = get_participant(message.target, sender_lookup_table)
 
         if isinstance(message, HasNewRoomNameMessage):

@@ -103,16 +103,28 @@ def init_db(db: Database, logger: Logger) -> None:
                 "original_file_path": str,
             },
             pk="id",
+            if_not_exists=True,
         )
+        db["file_object"].create(
+            {
+                "sha512sum": str,
+                "url": str,
+                "preview": bytes,
+                "mime_type": str,
+                "size": int,
+            },
+            pk="sha512sum",
+            if_not_exists=True,
+        )
+        db["file_copyable"].create({"original_file_path": str, "target_file_path": str})
         db["file_chat"].create(
             {
                 "id": str,
                 "name": str,
-                "preview": str,
-                "file_fs_id": str,
+                "sha512sum": str,
             },
             pk="id",
-            foreign_keys=[("file_fs_id", "file_fs", "id")],
+            foreign_keys=[("sha512sum", "file_object", "sha512sum")],
             if_not_exists=True,
         )
         db["room"].create(
@@ -271,6 +283,7 @@ def prepare_messages(
             msg_file = get_file(message)
             if msg_file:
                 message_file = True
+                file_id = msg_file["id"]
                 prepared_files.append(msg_file)
 
         if isinstance(message, HasTargetUserMessage):
@@ -360,7 +373,7 @@ def get_sender_lookup_table(db: Database) -> Dict[uuid.UUID, Dict]:
 
 def get_system_message_id(db: Database) -> uuid.UUID:
     try:
-        system_message_id_bytes = db["system_message_id"].get(1)
+        system_message_id_dict = db["system_message_id"].get(1)
     except NotFoundError:
         system_message_id = uuid.uuid4()
         db["system_message_id"].insert(
@@ -368,7 +381,7 @@ def get_system_message_id(db: Database) -> uuid.UUID:
         )
         return system_message_id
 
-    return uuid.UUID(system_message_id_bytes["system_message_id"])
+    return uuid.UUID(system_message_id_dict["system_message_id"])
 
 
 def crawl_directory(path: Path, glob: str = "**/*") -> List[Path]:
@@ -407,6 +420,10 @@ def match_media_files(
     # iterate over files that occur in chat messages
     progress_size = db["file_chat"].count
     set_progress_size(progress_size)
+
+    file_fs_imported = set()
+    file_objects = []
+    file_copyable = []
     for row in db["file_chat"].rows:
         file_id = row["id"]
         file_name = row["name"]
@@ -417,14 +434,40 @@ def match_media_files(
         for file_fs in db["file_fs"].rows_where("name = ?", [file_name]):
             # this should only yield one row, see check above
             file_fs_id = file_fs["id"]
+            file_fs_sum = file_fs["sha512sum"]
             file_fs_preview = file_fs["preview"]
+            file_fs_path = file_fs["original_file_path"]
+            file_fs_mimetype = file_fs["mime_type"]
+            file_fs_size = file_fs["size"]
             db["file_chat"].update(
-                file_id, {"file_fs_id": file_fs_id, "preview": file_fs_preview}
+                file_id,
+                {
+                    "sha512sum": file_fs_sum,
+                },
             )
-            db["file_fs"].update(file_fs_id, {"preview": None})
+            file_objects.append(
+                {
+                    "sha512sum": file_fs_sum,
+                    "url": config_url_format.format(file_fs_sum),
+                    "preview": file_fs_preview,
+                    "mime_type": file_fs_mimetype,
+                    "size": file_fs_size,
+                }
+            )
+            file_copyable.append(
+                {
+                    "original_file_path": str(file_fs_path),
+                    "target_file_path": file_fs_sum,
+                }
+            )
+            file_fs_imported.append(file_fs_id)
             break
 
         progress_callback()
+
+    db["file_object"].insert_all(file_objects, pk="sha512sum")
+    db["file_copyable"].insert_all(file_copyable)
+    db["file_fs"].delete_where("id = ?", file_fs_imported)
 
 
 def import_media_to_db(
@@ -493,15 +536,36 @@ def move_files(
     logger: Logger,
     set_progress_size=lambda *_, **__: None,
     progress_callback=lambda *_: None,
-) -> None:
-    copyable_files_count = db["file_fs"].count
+) -> List[Path]:
+    # delete duplicate copyable files
+    cursor = db.execute(
+        (
+            "delete from file_copyable "
+            "where rowid > ("
+            "select min(rowid) from file_copyable f2 "
+            "where file_copyable.original_file_path = f2.original_file_path);"
+        )
+    )
+    copyable_files_count = db["file_copyable"].count
     set_progress_size(copyable_files_count)
-    # for row in db["file_fs"].rows:
-    for i in range(copyable_files_count):
-        import time
 
-        time.sleep(0.1)
+    deleteable_files = []
+    print(f"Copying {copyable_files_count:n} files to {str(output_directory)}.")
+    for row in db["file_copyable"].rows:
+        source = Path(row["original_file_path"])
+        target_file_name = row["target_file_path"]
+        target = output_directory / target_file_name[:2] / target_file_name
+        target.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy(source, target)
+        except Exception as exception:
+            logger.critical("error copying file: %s", exception, exc_info=True)
+            break
+
+        deleteable_files.append(source)
         progress_callback()
+
+    return deleteable_files
 
 
 def _generate_preview(file: Path, mime_type: str, logger: Logger) -> Optional[bytes]:

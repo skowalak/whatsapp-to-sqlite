@@ -9,6 +9,7 @@ arpeggio = "*"
 sqlite-utils = ">=2.7.2"
 marshmallow = "*"
 pillow = "*"
+rich = "*"
 
 [dev-packages]
 black = "*"
